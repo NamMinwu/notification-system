@@ -5,10 +5,12 @@ import com.notification.domain.Notification;
 import com.notification.domain.NotificationChannel;
 import com.notification.domain.NotificationStatus;
 import com.notification.domain.NotificationType;
+import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -18,6 +20,14 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 	/** 중복 INSERT 충돌 시 기존 알림을 멱등 반환하기 위한 조회 (eventId non-null 전제). */
 	Optional<Notification> findByEventIdAndRecipientIdAndChannelAndNotificationType(
 			String eventId, String recipientId, NotificationChannel channel, NotificationType notificationType);
+
+	/**
+	 * 행 락 후 조회. 취소처럼 read-then-mutate가 워커의 claim(FOR UPDATE SKIP LOCKED)과 경합하는 경우,
+	 * 락을 잡아 워커가 해당 행을 건너뛰게 하고 최신 상태를 보장한다.
+	 */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("SELECT n FROM Notification n WHERE n.id = :id")
+	Optional<Notification> findByIdForUpdate(@Param("id") Long id);
 
 	/**
 	 * Sweeper: Lease가 만료된 PROCESSING(좀비)을 PENDING으로 복구. WHERE가 PROCESSING만

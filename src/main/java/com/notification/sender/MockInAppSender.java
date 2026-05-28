@@ -1,23 +1,15 @@
 package com.notification.sender;
 
 import com.notification.config.NotificationProperties;
-import com.notification.domain.Notification;
 import com.notification.domain.NotificationChannel;
-import lombok.extern.slf4j.Slf4j;
+import com.notification.service.NotificationRenderer;
 import org.springframework.stereotype.Component;
 
-@Slf4j
 @Component
 public class MockInAppSender extends AbstractMockSender {
 
-	public MockInAppSender(NotificationProperties properties) {
-		super(properties.mockSender().failureRate());
-	}
-
-	@Override
-	protected void deliver(Notification notification) {
-		log.info("[MOCK-IN_APP] delivered id={} recipient={} type={}",
-				notification.getId(), notification.getRecipientId(), notification.getNotificationType());
+	public MockInAppSender(NotificationProperties properties, NotificationRenderer renderer) {
+		super(properties.mockSender().failureRate(), renderer);
 	}
 
 	@Override
