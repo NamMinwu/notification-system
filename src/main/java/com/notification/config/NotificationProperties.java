@@ -12,7 +12,8 @@ public record NotificationProperties(
 		Sweeper sweeper,
 		Worker worker,
 		Retention retention,
-		MockSender mockSender) {
+		MockSender mockSender,
+		boolean schedulingEnabled) {
 
 	public record Polling(Duration interval, int batchSize) {
 	}
@@ -31,7 +32,7 @@ public record NotificationProperties(
 	public record Sweeper(Duration interval, Duration leaseTimeout) {
 	}
 
-	public record Worker(int semaphorePermits, boolean schedulingEnabled) {
+	public record Worker(int semaphorePermits) {
 	}
 
 	public record Retention(boolean enabled, int sentDays, int deadLetterDays) {

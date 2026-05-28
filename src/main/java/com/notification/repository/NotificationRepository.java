@@ -20,6 +20,18 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 			String eventId, String recipientId, NotificationChannel channel, NotificationType notificationType);
 
 	/**
+	 * Sweeper: Lease가 만료된 PROCESSING(좀비)을 PENDING으로 복구. WHERE가 PROCESSING만
+	 * 대상으로 하므로 상태 전이 불변식(PROCESSING→PENDING)을 만족한다.
+	 */
+	@org.springframework.transaction.annotation.Transactional
+	@Modifying(clearAutomatically = true)
+	@Query("UPDATE Notification n SET n.status = com.notification.domain.NotificationStatus.PENDING, "
+			+ "n.leaseExpiresAt = null, n.processingStartedAt = null, n.updatedAt = :now "
+			+ "WHERE n.status = com.notification.domain.NotificationStatus.PROCESSING "
+			+ "AND n.leaseExpiresAt < :now")
+	int recoverExpiredLeases(@Param("now") Instant now);
+
+	/**
 	 * Worker 폴링: 발송 시각이 도래한 PENDING/FAILED 배치를 잠그고 가져온다.
 	 * FOR UPDATE SKIP LOCKED로 다중 인스턴스가 서로 다른 행을 픽업한다(대기 없음).
 	 */

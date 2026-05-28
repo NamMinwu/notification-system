@@ -25,7 +25,7 @@ public class NotificationWorker {
 
 	@Scheduled(fixedDelayString = "${notification.polling.interval}")
 	public void poll() {
-		if (!properties.worker().schedulingEnabled()) {
+		if (!properties.schedulingEnabled()) {
 			return;
 		}
 		runOnce();

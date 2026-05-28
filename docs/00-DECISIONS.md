@@ -96,6 +96,7 @@ private Map<String, Object> payload;
 
 ```yaml
 notification:
+  scheduling-enabled: true  # 이 인스턴스가 백그라운드 스케줄(Worker 폴링 + Sweeper)을 실행
   polling:
     interval: 5s          # SLA(1분)의 1/12 안전 마진
     batch-size: 50        # 1회 polling 픽업 건수 (LIMIT)
@@ -112,7 +113,6 @@ notification:
     lease-timeout: 5m     # Sender timeout × 2 (좀비 판정 기준)
   worker:
     semaphore-permits: 16 # Virtual Thread 동시 발송 제한 (DB 풀 크기와 함께 튜닝)
-    scheduling-enabled: true
   retention:
     enabled: false        # 기본 비활성 (운영 시 활성화)
     sent-days: 30
