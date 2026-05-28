@@ -1,0 +1,179 @@
+package com.notification.domain;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import java.time.Instant;
+import java.util.Map;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
+/**
+ * 알림 Outbox 엔티티. 상태 전이는 {@link NotificationStatus#canTransitionTo}로 도메인 레벨에서 강제한다.
+ * 모든 시각은 UTC(Instant). 도메인 메서드는 Clock에 의존하지 않도록 {@code now}를 인자로 받는다.
+ */
+@Entity
+@Table(name = "notification")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class Notification {
+
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	private Long id;
+
+	@Column(name = "event_id")
+	private String eventId;
+
+	@Column(name = "recipient_id", nullable = false)
+	private String recipientId;
+
+	@Enumerated(EnumType.STRING)
+	@Column(name = "notification_type", nullable = false)
+	private NotificationType notificationType;
+
+	@Enumerated(EnumType.STRING)
+	@Column(name = "channel", nullable = false)
+	private NotificationChannel channel;
+
+	@JdbcTypeCode(SqlTypes.JSON)
+	@Column(name = "payload", columnDefinition = "jsonb")
+	private Map<String, Object> payload;
+
+	@Enumerated(EnumType.STRING)
+	@Column(name = "status", nullable = false)
+	private NotificationStatus status;
+
+	@Column(name = "retry_count", nullable = false)
+	private int retryCount;
+
+	@Column(name = "scheduled_at")
+	private Instant scheduledAt;
+
+	@Column(name = "next_retry_at")
+	private Instant nextRetryAt;
+
+	@Column(name = "lease_expires_at")
+	private Instant leaseExpiresAt;
+
+	@Column(name = "processing_started_at")
+	private Instant processingStartedAt;
+
+	@Column(name = "sent_at")
+	private Instant sentAt;
+
+	@Column(name = "failed_at")
+	private Instant failedAt;
+
+	@Column(name = "dead_letter_at")
+	private Instant deadLetterAt;
+
+	@Column(name = "cancelled_at")
+	private Instant cancelledAt;
+
+	@Column(name = "last_error_code")
+	private String lastErrorCode;
+
+	@Column(name = "last_error_message")
+	private String lastErrorMessage;
+
+	@Column(name = "is_read", nullable = false)
+	private boolean read;
+
+	@Column(name = "read_at")
+	private Instant readAt;
+
+	@Column(name = "created_at", nullable = false)
+	private Instant createdAt;
+
+	@Column(name = "updated_at", nullable = false)
+	private Instant updatedAt;
+
+	@lombok.Builder(builderClassName = "Builder")
+	private Notification(String eventId, String recipientId, NotificationType notificationType,
+			NotificationChannel channel, Map<String, Object> payload, Instant scheduledAt,
+			Instant createdAt) {
+		this.eventId = eventId;
+		this.recipientId = recipientId;
+		this.notificationType = notificationType;
+		this.channel = channel;
+		this.payload = payload;
+		this.scheduledAt = scheduledAt;
+		this.status = NotificationStatus.PENDING;
+		this.retryCount = 0;
+		this.read = false;
+		this.createdAt = createdAt;
+		this.updatedAt = createdAt;
+	}
+
+	// --- 상태 전이 ---
+
+	public void startProcessing(Instant now, Instant leaseExpiresAt) {
+		transitionTo(NotificationStatus.PROCESSING, now);
+		this.processingStartedAt = now;
+		this.leaseExpiresAt = leaseExpiresAt;
+	}
+
+	public void markSent(Instant now) {
+		transitionTo(NotificationStatus.SENT, now);
+		this.sentAt = now;
+		this.leaseExpiresAt = null;
+	}
+
+	public void markFailed(String errorCode, String errorMessage, Instant nextRetryAt, Instant now) {
+		transitionTo(NotificationStatus.FAILED, now);
+		this.retryCount += 1;
+		this.lastErrorCode = errorCode;
+		this.lastErrorMessage = errorMessage;
+		this.nextRetryAt = nextRetryAt;
+		this.failedAt = now;
+		this.leaseExpiresAt = null;
+	}
+
+	public void markDeadLetter(String errorCode, String errorMessage, Instant now) {
+		transitionTo(NotificationStatus.DEAD_LETTER, now);
+		this.lastErrorCode = errorCode;
+		this.lastErrorMessage = errorMessage;
+		this.deadLetterAt = now;
+		this.leaseExpiresAt = null;
+	}
+
+	public void recoverToPending(Instant now) {
+		transitionTo(NotificationStatus.PENDING, now);
+		this.leaseExpiresAt = null;
+		this.processingStartedAt = null;
+	}
+
+	public void cancel(Instant now) {
+		transitionTo(NotificationStatus.CANCELLED, now);
+		this.cancelledAt = now;
+	}
+
+	/** 멱등 읽음 처리. 이미 읽었으면 false 반환(readAt 첫 시각 유지). */
+	public boolean markRead(Instant now) {
+		if (this.read) {
+			return false;
+		}
+		this.read = true;
+		this.readAt = now;
+		this.updatedAt = now;
+		return true;
+	}
+
+	private void transitionTo(NotificationStatus target, Instant now) {
+		if (!status.canTransitionTo(target)) {
+			throw new IllegalStateException(
+					"잘못된 상태 전이: " + status + " → " + target + " (id=" + id + ")");
+		}
+		this.status = target;
+		this.updatedAt = now;
+	}
+}
