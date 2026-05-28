@@ -5,6 +5,8 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/notification}
     username: ${SPRING_DATASOURCE_USERNAME:notification}
     password: ${SPRING_DATASOURCE_PASSWORD:notification}
+    hikari:
+      maximum-pool-size: 20   # 병렬 발송(worker.semaphore-permits)보다 크게
   jpa:
     hibernate:
       ddl-auto: none          # Flyway가 스키마를 소유
@@ -40,8 +42,11 @@ notification:
     interval: 1m
     lease-timeout: 5m
   worker:
-    semaphore-permits: 50
+    semaphore-permits: 16
+    scheduling-enabled: true
   retention:
     enabled: false
     sent-days: 30
     dead-letter-days: 90
+  mock-sender:
+    failure-rate: 0.0
