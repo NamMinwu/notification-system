@@ -44,6 +44,7 @@ public class Notification {
 	@Column(name = "channel", nullable = false)
 	private NotificationChannel channel;
 
+	@Getter(AccessLevel.NONE)
 	@JdbcTypeCode(SqlTypes.JSON)
 	@Column(name = "payload", columnDefinition = "jsonb")
 	private Map<String, Object> payload;
@@ -166,6 +167,11 @@ public class Notification {
 		this.readAt = now;
 		this.updatedAt = now;
 		return true;
+	}
+
+	/** 방어적 복사로 가변 payload 누출 방지. */
+	public Map<String, Object> getPayload() {
+		return payload == null ? null : Map.copyOf(payload);
 	}
 
 	private void transitionTo(NotificationStatus target, Instant now) {
