@@ -1,0 +1,28 @@
+# 테스트 프로파일: 타임아웃/주기를 짧게. 시간 의존 단위 테스트는 Clock 주입으로 결정적 검증.
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+
+notification:
+  polling:
+    interval: 1s
+    batch-size: 50
+  retry:
+    max-attempts: 5
+    initial-backoff: 1s
+    multiplier: 2
+    max-backoff: 8s
+    jitter-max: 1s
+  sender:
+    timeout: 5s
+  sweeper:
+    interval: 1s
+    lease-timeout: 10s
+  worker:
+    semaphore-permits: 50
+  retention:
+    enabled: false
+    sent-days: 30
+    dead-letter-days: 90
