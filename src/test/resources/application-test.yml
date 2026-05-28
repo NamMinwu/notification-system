@@ -21,8 +21,11 @@ notification:
     interval: 1s
     lease-timeout: 10s
   worker:
-    semaphore-permits: 50
+    semaphore-permits: 8
+    scheduling-enabled: false   # 테스트는 runOnce()를 직접 호출해 결정적으로 검증
   retention:
     enabled: false
     sent-days: 30
     dead-letter-days: 90
+  mock-sender:
+    failure-rate: 0.0

@@ -17,6 +17,21 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 	Optional<Notification> findByEventIdAndRecipientIdAndChannelAndNotificationType(
 			String eventId, String recipientId, NotificationChannel channel, NotificationType notificationType);
 
+	/**
+	 * Worker 폴링: 발송 시각이 도래한 PENDING/FAILED 배치를 잠그고 가져온다.
+	 * FOR UPDATE SKIP LOCKED로 다중 인스턴스가 서로 다른 행을 픽업한다(대기 없음).
+	 */
+	@Query(value = """
+			SELECT * FROM notification
+			WHERE status IN ('PENDING', 'FAILED')
+			  AND (scheduled_at IS NULL OR scheduled_at <= :now)
+			  AND (next_retry_at IS NULL OR next_retry_at <= :now)
+			ORDER BY created_at
+			LIMIT :limit
+			FOR UPDATE SKIP LOCKED
+			""", nativeQuery = true)
+	List<Notification> findBatchForProcessing(@Param("now") Instant now, @Param("limit") int limit);
+
 	List<Notification> findByRecipientIdOrderByCreatedAtDesc(String recipientId);
 
 	List<Notification> findByRecipientIdAndReadOrderByCreatedAtDesc(String recipientId, boolean read);

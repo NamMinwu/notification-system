@@ -111,7 +111,8 @@ notification:
     interval: 1m          # 좀비 감지 주기
     lease-timeout: 5m     # Sender timeout × 2 (좀비 판정 기준)
   worker:
-    semaphore-permits: 50 # Virtual Thread 동시 발송 제한
+    semaphore-permits: 16 # Virtual Thread 동시 발송 제한 (DB 풀 크기와 함께 튜닝)
+    scheduling-enabled: true
   retention:
     enabled: false        # 기본 비활성 (운영 시 활성화)
     sent-days: 30
@@ -142,7 +143,7 @@ notification:
 | 디스패치 추상화 | **`NotificationDispatcher` 인터페이스** | 향후 Kafka Consumer로 구현체 교체 |
 | 채널 추상화 | **`NotificationSender` 인터페이스** (채널별 구현) | PUSH/SMS 확장 시 구현체만 추가 |
 | 다중 인스턴스 | **`SELECT FOR UPDATE SKIP LOCKED`** | 워커 간 행 분배, 락 대기 없음 |
-| **Worker 발송 모델** | **Virtual Thread + Semaphore(50) 병렬** | 배치 내 알림을 가상 스레드로 병렬 발송, 외부 부하는 Semaphore 제한. 각 알림 = 독립 트랜잭션(실패 격리) |
+| **Worker 발송 모델** | **Virtual Thread + Semaphore 병렬** | 배치 내 알림을 가상 스레드로 병렬 발송, 외부 부하는 Semaphore(기본 16, DB 풀과 함께 튜닝) 제한. 각 알림 = 독립 트랜잭션(실패 격리) |
 | 좀비 복구 | **Lease + Sweeper** | `lease_expires_at` 만료 행을 PENDING 복구 |
 | 실패 사유 기록 | **컬럼 방식** (`last_error_code/message/at`, `retry_count`) + App Log | 마지막 에러는 DB, 전체 이력은 로그 시스템 위임 |
 | 실패 분류 | retryable vs permanent | 영구 실패(잘못된 이메일 등)는 즉시 DEAD_LETTER |

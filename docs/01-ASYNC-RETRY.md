@@ -77,7 +77,7 @@ API 스레드는 **DB에 쓰기만** 하고 끝난다. 실제 외부 발송(SMTP
        FOR UPDATE SKIP LOCKED            -- 다중 인스턴스 안전
   2. 픽업한 행을 PROCESSING으로 전이 + lease_expires_at = now + 5분
   3. (트랜잭션 커밋 → 락 해제, 하지만 상태가 PROCESSING이라 재픽업 안 됨)
-  4. 각 알림을 Virtual Thread로 병렬 발송 (Semaphore(50)로 동시 수 제한)
+  4. 각 알림을 Virtual Thread로 병렬 발송 (Semaphore로 동시 수 제한)
        성공 → SENT
        일시 실패 → FAILED + retry_count++ + next_retry_at 계산
        영구 실패 → DEAD_LETTER
@@ -85,9 +85,9 @@ API 스레드는 **DB에 쓰기만** 하고 끝난다. 실제 외부 발송(SMTP
 
 ### 3-3. Worker 발송 모델 — Virtual Thread + Semaphore
 
-배치로 픽업한 50건을 **하나씩 순차** 발송하면 외부 응답 지연이 누적된다.
+배치로 픽업한 알림을 **하나씩 순차** 발송하면 외부 응답 지연이 누적된다.
 Java 21 Virtual Thread로 각 알림을 병렬 발송하되, 외부 시스템(SMTP) 보호를 위해
-`Semaphore(50)`로 동시 호출 수를 제한한다.
+`Semaphore`(기본 16, DB 커넥션 풀 크기와 함께 튜닝)로 동시 호출 수를 제한한다.
 
 - 각 알림 발송은 **독립 트랜잭션**이다 → 한 건 실패가 다른 건에 영향 없음 (실패 격리).
 - `SKIP LOCKED`가 인스턴스 **간** 분배를 보장하고, Virtual Thread가 인스턴스 **내** 병렬을 담당한다.
@@ -248,7 +248,7 @@ notification:
   retry:     { max-attempts: 5, initial-backoff: 1m, multiplier: 2, max-backoff: 16m, jitter-max: 30s }
   sender:    { timeout: 2m }
   sweeper:   { interval: 1m, lease-timeout: 5m }
-  worker:    { semaphore-permits: 50 }
+  worker:    { semaphore-permits: 16, scheduling-enabled: true }
   retention: { enabled: false, sent-days: 30, dead-letter-days: 90 }
 ```
 
