@@ -35,7 +35,7 @@ public class AdminNotificationService {
 		return NotificationResponse.from(n);
 	}
 
-	/** 배치 재시도: errorCode가 null이면 전체 DEAD_LETTER 재큐잉. 재큐잉 건수 반환. */
+	/** 배치 재시도: 특정 errorCode의 DEAD_LETTER를 재큐잉. 재큐잉 건수 반환. */
 	@Transactional
 	public int batchRetry(String errorCode) {
 		int count = repository.requeueDeadLetters(errorCode, clock.instant());

@@ -108,19 +108,6 @@ class AdminNotificationServiceIT {
 	}
 
 	@Test
-	@DisplayName("batchRetry: errorCode null이면 전체 DEAD_LETTER 재큐잉")
-	void batchRetry_all() {
-		saveDeadLetter("evt-1", "SMTP_TIMEOUT", 4);
-		saveDeadLetter("evt-2", "INVALID_EMAIL", 4);
-
-		int requeued = service.batchRetry(null);
-
-		assertThat(requeued).isEqualTo(2);
-		assertThat(repository.findByStatusOrderByCreatedAtDesc(NotificationStatus.DEAD_LETTER))
-				.isEmpty();
-	}
-
-	@Test
 	@DisplayName("listDeadLetters / deadLetterStats: 모니터링 조회")
 	void monitoring() {
 		saveDeadLetter("evt-1", "SMTP_TIMEOUT", 4);

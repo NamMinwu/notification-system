@@ -59,13 +59,13 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 	List<DeadLetterStat> deadLetterStats();
 
 	/**
-	 * 배치 수동 재시도: DEAD_LETTER를 PENDING으로 재큐잉. errorCode가 null이면 전체.
+	 * 배치 수동 재시도: 특정 errorCode의 DEAD_LETTER를 PENDING으로 재큐잉.
 	 * WHERE가 DEAD_LETTER만 대상으로 하므로 상태 전이 불변식(DEAD_LETTER→PENDING)을 만족한다.
 	 */
 	@Modifying(clearAutomatically = true)
 	@Query("UPDATE Notification n SET n.status = com.notification.domain.NotificationStatus.PENDING, "
 			+ "n.nextRetryAt = :now, n.deadLetterAt = null, n.leaseExpiresAt = null, n.updatedAt = :now "
 			+ "WHERE n.status = com.notification.domain.NotificationStatus.DEAD_LETTER "
-			+ "AND (:errorCode IS NULL OR n.lastErrorCode = :errorCode)")
+			+ "AND n.lastErrorCode = :errorCode")
 	int requeueDeadLetters(@Param("errorCode") String errorCode, @Param("now") Instant now);
 }

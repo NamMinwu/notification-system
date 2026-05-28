@@ -97,13 +97,13 @@ class AdminNotificationControllerTest {
 	}
 
 	@Test
-	@DisplayName("retry-batch: body 없이 호출하면 errorCode=null로 전체 재큐잉")
-	void retryBatch_noBody_requeuesAll() throws Exception {
-		when(service.batchRetry(null)).thenReturn(5);
-
-		mockMvc.perform(post("/api/v1/admin/notifications/retry-batch").header("X-User-Role", "ADMIN"))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.retriedCount").value(5));
+	@DisplayName("retry-batch: errorCode 누락이면 400 (전체 재시도 방지)")
+	void retryBatch_missingErrorCode_returns400() throws Exception {
+		mockMvc.perform(post("/api/v1/admin/notifications/retry-batch")
+						.header("X-User-Role", "ADMIN")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{}"))
+				.andExpect(status().isBadRequest());
 	}
 
 	@Test

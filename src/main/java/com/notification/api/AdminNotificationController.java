@@ -4,6 +4,7 @@ import com.notification.api.dto.BatchRetryRequest;
 import com.notification.api.dto.DeadLetterStat;
 import com.notification.api.dto.NotificationResponse;
 import com.notification.service.AdminNotificationService;
+import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -28,9 +29,8 @@ public class AdminNotificationController {
 	}
 
 	@PostMapping("/retry-batch")
-	public Map<String, Integer> retryBatch(@RequestBody(required = false) BatchRetryRequest request) {
-		String errorCode = request == null ? null : request.errorCode();
-		return Map.of("retriedCount", service.batchRetry(errorCode));
+	public Map<String, Integer> retryBatch(@Valid @RequestBody BatchRetryRequest request) {
+		return Map.of("retriedCount", service.batchRetry(request.errorCode()));
 	}
 
 	@GetMapping("/dead-letter")
