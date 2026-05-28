@@ -32,7 +32,7 @@ PENDING ──▶ PROCESSING ──▶ SENT
    │            └──▶ DEAD_LETTER (영구 실패 즉시 종료)
    └──▶ CANCELLED (예약 발송 취소)
 
-DEAD_LETTER ──▶ PROCESSING (수동 재시도)
+DEAD_LETTER ──▶ PENDING (수동 재시도 재큐잉 → 워커가 다시 claim)
 ```
 
 | 상태 | 의미 | 진입 | 다음 |
@@ -41,7 +41,7 @@ DEAD_LETTER ──▶ PROCESSING (수동 재시도)
 | `PROCESSING` | 발송 시도 중 (Lease 보유) | Worker 락 획득 | SENT, FAILED, DEAD_LETTER, PENDING |
 | `SENT` | 발송 성공 | Sender 성공 | (종료) |
 | `FAILED` | 일시 실패, 재시도 대기 | retryable 예외 + retry_count < MAX | PROCESSING, DEAD_LETTER |
-| `DEAD_LETTER` | 최종 실패 | 영구 예외 / retry_count ≥ MAX | PROCESSING (수동) |
+| `DEAD_LETTER` | 최종 실패 | 영구 예외 / retry_count ≥ MAX | PENDING (수동 재시도 재큐잉) |
 | `CANCELLED` | 예약 취소됨 | PENDING에서 취소 요청 | (종료) |
 
 > **요구사항 trade-off 문서는 5-state를 권장**했으나, 선택 구현(발송 스케줄링)의 **예약 취소**를 명시적으로 다루기 위해 `CANCELLED` 종료 상태를 1개 추가했다. 취소는 `PENDING` 상태에서만 가능하며(이미 PROCESSING/SENT면 불가), 감사 이력이 남고 worker polling 대상에서 자연히 제외된다. Soft delete 대비 "사용자가 의도적으로 취소했다"는 의미가 상태로 명확히 표현된다.

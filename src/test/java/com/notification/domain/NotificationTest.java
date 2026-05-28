@@ -133,6 +133,33 @@ class NotificationTest {
 	}
 
 	@Test
+	@DisplayName("retry: DEAD_LETTER → PENDING 재큐잉, retry_count 유지 + next_retry_at 즉시")
+	void retry_requeuesFromDeadLetter() {
+		Notification n = newPending();
+		n.startProcessing(NOW, NOW.plusSeconds(300));
+		n.markDeadLetter("INVALID_EMAIL", "bad", NOW.plusSeconds(1));
+		int retryCountBefore = n.getRetryCount();
+
+		Instant retryAt = NOW.plusSeconds(100);
+		n.retry(retryAt);
+
+		assertThat(n.getStatus()).isEqualTo(NotificationStatus.PENDING);
+		assertThat(n.getRetryCount()).isEqualTo(retryCountBefore); // 누적 유지
+		assertThat(n.getNextRetryAt()).isEqualTo(retryAt);         // 즉시 픽업 대상
+		assertThat(n.getDeadLetterAt()).isNull();
+		assertThat(n.getLastErrorCode()).isEqualTo("INVALID_EMAIL"); // 이력 보존
+	}
+
+	@Test
+	@DisplayName("retry: DEAD_LETTER가 아니면 IllegalState")
+	void retry_onlyFromDeadLetter() {
+		Notification n = newPending();
+
+		assertThatThrownBy(() -> n.retry(NOW))
+				.isInstanceOf(IllegalStateException.class);
+	}
+
+	@Test
 	@DisplayName("cancel: PENDING → CANCELLED")
 	void cancel() {
 		Notification n = newPending();

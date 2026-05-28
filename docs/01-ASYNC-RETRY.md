@@ -172,6 +172,9 @@ last_failed_at     : 2026-05-28T10:01:30Z
 ### 5-4. 최종 실패(DEAD_LETTER)와 수동 재시도
 
 - `DEAD_LETTER`는 자동 picking 대상에서 제외되고, 운영자만 보는 영역이다.
+- 수동 재시도는 **`DEAD_LETTER → PENDING`으로 재큐잉**하고 `next_retry_at`을 즉시로 둔다.
+  그러면 다음 폴링에서 워커가 정상적으로 다시 claim한다(폴링 워커는 PENDING/FAILED만 집으므로,
+  PROCESSING으로 직접 보내면 어떤 워커도 처리하지 못한다).
 - 수동 재시도 시 **`retry_count`를 유지**한다.
   - 초기화하면 무한 루프 위험 (재시도 → 실패 → DEAD_LETTER → 재시도 → ...).
   - 유지하면 재시도가 또 실패할 때 즉시 DEAD_LETTER로 돌아가 **자동 차단**된다.

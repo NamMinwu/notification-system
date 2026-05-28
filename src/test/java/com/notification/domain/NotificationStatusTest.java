@@ -62,12 +62,13 @@ class NotificationStatusTest {
 	}
 
 	@Nested
-	@DisplayName("DEAD_LETTER는 수동 재시도(PROCESSING)로만 전이 가능")
+	@DisplayName("DEAD_LETTER는 수동 재시도 재큐잉(PENDING)으로만 전이 가능")
 	class FromDeadLetter {
 		@Test
-		void allowsManualRetryOnly() {
-			assertThat(NotificationStatus.DEAD_LETTER.canTransitionTo(NotificationStatus.PROCESSING)).isTrue();
-			assertThat(NotificationStatus.DEAD_LETTER.canTransitionTo(NotificationStatus.PENDING)).isFalse();
+		void allowsManualRequeueOnly() {
+			// 폴링 워커가 PENDING/FAILED만 claim하므로, 수동 재시도는 PENDING으로 재큐잉한다.
+			assertThat(NotificationStatus.DEAD_LETTER.canTransitionTo(NotificationStatus.PENDING)).isTrue();
+			assertThat(NotificationStatus.DEAD_LETTER.canTransitionTo(NotificationStatus.PROCESSING)).isFalse();
 			assertThat(NotificationStatus.DEAD_LETTER.canTransitionTo(NotificationStatus.SENT)).isFalse();
 		}
 	}

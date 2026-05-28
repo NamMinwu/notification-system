@@ -158,6 +158,17 @@ public class Notification {
 		this.cancelledAt = now;
 	}
 
+	/**
+	 * 수동 재시도: DEAD_LETTER → PENDING 재큐잉. retry_count·last_error는 유지(이력 보존)하고
+	 * next_retry_at을 즉시로 두어 다음 폴링에서 곧바로 픽업되게 한다.
+	 */
+	public void retry(Instant now) {
+		transitionTo(NotificationStatus.PENDING, now);
+		this.nextRetryAt = now;
+		this.deadLetterAt = null;
+		this.leaseExpiresAt = null;
+	}
+
 	/** 멱등 읽음 처리. 이미 읽었으면 false 반환(readAt 첫 시각 유지). */
 	public boolean markRead(Instant now) {
 		if (this.read) {
