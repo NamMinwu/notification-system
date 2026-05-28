@@ -6,6 +6,7 @@ spring:
     open-in-view: false
 
 notification:
+  scheduling-enabled: false   # 테스트는 runOnce()/sweep()를 직접 호출해 결정적으로 검증
   polling:
     interval: 1s
     batch-size: 50
@@ -22,7 +23,6 @@ notification:
     lease-timeout: 10s
   worker:
     semaphore-permits: 8
-    scheduling-enabled: false   # 테스트는 runOnce()를 직접 호출해 결정적으로 검증
   retention:
     enabled: false
     sent-days: 30

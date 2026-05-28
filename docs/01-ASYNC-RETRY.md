@@ -251,7 +251,8 @@ notification:
   retry:     { max-attempts: 5, initial-backoff: 1m, multiplier: 2, max-backoff: 16m, jitter-max: 30s }
   sender:    { timeout: 2m }
   sweeper:   { interval: 1m, lease-timeout: 5m }
-  worker:    { semaphore-permits: 16, scheduling-enabled: true }
+  scheduling-enabled: true
+  worker:    { semaphore-permits: 16 }
   retention: { enabled: false, sent-days: 30, dead-letter-days: 90 }
 ```
 

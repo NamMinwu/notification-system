@@ -27,6 +27,7 @@ management:
 
 # 알림 시스템 정책 (운영 중 조정 가능, ADR 00-DECISIONS 참고)
 notification:
+  scheduling-enabled: true   # 이 인스턴스가 백그라운드 스케줄 작업(Worker 폴링 + Sweeper)을 실행
   polling:
     interval: 5s
     batch-size: 50
@@ -43,7 +44,6 @@ notification:
     lease-timeout: 5m
   worker:
     semaphore-permits: 16
-    scheduling-enabled: true
   retention:
     enabled: false
     sent-days: 30
