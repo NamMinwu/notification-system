@@ -62,4 +62,12 @@ public class NotificationController {
 	public Map<String, Integer> markAllAsRead(@RequestHeader("X-User-Id") String userId) {
 		return Map.of("updatedCount", service.markAllAsRead(userId));
 	}
+
+	/** 예약 발송 취소 (PENDING만). */
+	@PatchMapping("/{id}/cancel")
+	public NotificationResponse cancel(
+			@PathVariable Long id,
+			@RequestHeader("X-User-Id") String userId) {
+		return service.cancel(id, userId);
+	}
 }

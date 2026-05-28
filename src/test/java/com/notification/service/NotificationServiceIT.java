@@ -9,10 +9,14 @@ import com.notification.api.dto.NotificationResponse;
 import com.notification.domain.NotificationChannel;
 import com.notification.domain.NotificationStatus;
 import com.notification.domain.NotificationType;
+import com.notification.domain.Notification;
 import com.notification.exception.NotificationAccessDeniedException;
+import com.notification.exception.NotificationNotCancellableException;
 import com.notification.exception.NotificationNotFoundException;
+import com.notification.repository.NotificationRepository;
 import com.notification.support.DatabaseCleaner;
 import com.notification.support.IntegrationTest;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +29,9 @@ class NotificationServiceIT {
 
 	@Autowired
 	private NotificationService service;
+
+	@Autowired
+	private NotificationRepository repository;
 
 	@Autowired
 	private DatabaseCleaner databaseCleaner;
@@ -149,5 +156,40 @@ class NotificationServiceIT {
 
 		int again = service.markAllAsRead("user-1");
 		assertThat(again).isZero();
+	}
+
+	@Test
+	@DisplayName("cancel: 본인의 PENDING 알림은 CANCELLED")
+	void cancel_pending() {
+		Long id = service.create(request("evt-1", "user-1")).id();
+
+		NotificationResponse res = service.cancel(id, "user-1");
+
+		assertThat(res.status()).isEqualTo(NotificationStatus.CANCELLED);
+	}
+
+	@Test
+	@DisplayName("cancel: 다른 사용자는 AccessDenied")
+	void cancel_wrongUser_denied() {
+		Long id = service.create(request("evt-1", "user-1")).id();
+
+		assertThatThrownBy(() -> service.cancel(id, "intruder"))
+				.isInstanceOf(NotificationAccessDeniedException.class);
+	}
+
+	@Test
+	@DisplayName("cancel: PENDING이 아니면 NotCancellable")
+	void cancel_notPending_throws() {
+		Notification sent = Notification.builder()
+				.recipientId("user-1").notificationType(NotificationType.PAYMENT_CONFIRMED)
+				.channel(NotificationChannel.EMAIL).eventId("evt-1")
+				.createdAt(Instant.parse("2026-05-28T10:00:00Z")).build();
+		sent.startProcessing(Instant.parse("2026-05-28T10:00:00Z"),
+				Instant.parse("2026-05-28T10:05:00Z"));
+		sent.markSent(Instant.parse("2026-05-28T10:00:01Z"));
+		Long id = repository.saveAndFlush(sent).getId();
+
+		assertThatThrownBy(() -> service.cancel(id, "user-1"))
+				.isInstanceOf(NotificationNotCancellableException.class);
 	}
 }

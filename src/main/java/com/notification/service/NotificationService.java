@@ -4,7 +4,9 @@ import com.notification.api.dto.CreateNotificationRequest;
 import com.notification.api.dto.CreateNotificationResponse;
 import com.notification.api.dto.NotificationResponse;
 import com.notification.domain.Notification;
+import com.notification.domain.NotificationStatus;
 import com.notification.exception.NotificationAccessDeniedException;
+import com.notification.exception.NotificationNotCancellableException;
 import com.notification.exception.NotificationNotFoundException;
 import com.notification.repository.NotificationRepository;
 import java.time.Clock;
@@ -88,5 +90,23 @@ public class NotificationService {
 	@Transactional
 	public int markAllAsRead(String recipientId) {
 		return repository.markAllAsRead(recipientId, clock.instant());
+	}
+
+	/**
+	 * 예약 발송 취소. 본인의 PENDING 알림만 가능(이미 처리 중/완료면 취소 불가).
+	 * 행 락(FOR UPDATE)으로 워커 claim과의 경합을 방지 — 락을 잡으면 워커의 SKIP LOCKED가 건너뛴다.
+	 */
+	@Transactional
+	public NotificationResponse cancel(Long id, String requesterId) {
+		Notification n = repository.findByIdForUpdate(id)
+				.orElseThrow(() -> new NotificationNotFoundException(id));
+		if (!n.getRecipientId().equals(requesterId)) {
+			throw new NotificationAccessDeniedException(id);
+		}
+		if (n.getStatus() != NotificationStatus.PENDING) {
+			throw new NotificationNotCancellableException(id, n.getStatus());
+		}
+		n.cancel(clock.instant());
+		return NotificationResponse.from(n);
 	}
 }

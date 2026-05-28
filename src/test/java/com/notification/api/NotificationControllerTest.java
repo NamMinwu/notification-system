@@ -15,6 +15,7 @@ import com.notification.domain.NotificationChannel;
 import com.notification.domain.NotificationStatus;
 import com.notification.domain.NotificationType;
 import com.notification.exception.NotificationAccessDeniedException;
+import com.notification.exception.NotificationNotCancellableException;
 import com.notification.exception.NotificationNotFoundException;
 import com.notification.service.NotificationService;
 import java.time.Instant;
@@ -157,5 +158,35 @@ class NotificationControllerTest {
 		mockMvc.perform(patch("/api/v1/notifications/read-all").header("X-User-Id", "user-1"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.updatedCount").value(3));
+	}
+
+	@Test
+	@DisplayName("PATCH /{id}/cancel: 본인 PENDING 취소 200")
+	void cancel_returns200() throws Exception {
+		when(service.cancel(eq(1L), eq("user-1")))
+				.thenReturn(new NotificationResponse(1L, "user-1", NotificationType.PAYMENT_CONFIRMED,
+						NotificationChannel.EMAIL, NotificationStatus.CANCELLED, Map.of(), false, null,
+						null, 0, null, Instant.parse("2026-05-28T10:00:00Z")));
+
+		mockMvc.perform(patch("/api/v1/notifications/1/cancel").header("X-User-Id", "user-1"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("CANCELLED"));
+	}
+
+	@Test
+	@DisplayName("PATCH /{id}/cancel: PENDING 아니면 409")
+	void cancel_notPending_returns409() throws Exception {
+		when(service.cancel(eq(1L), eq("user-1")))
+				.thenThrow(new NotificationNotCancellableException(1L, NotificationStatus.SENT));
+
+		mockMvc.perform(patch("/api/v1/notifications/1/cancel").header("X-User-Id", "user-1"))
+				.andExpect(status().isConflict());
+	}
+
+	@Test
+	@DisplayName("PATCH /{id}/cancel: X-User-Id 누락 400")
+	void cancel_missingHeader_returns400() throws Exception {
+		mockMvc.perform(patch("/api/v1/notifications/1/cancel"))
+				.andExpect(status().isBadRequest());
 	}
 }
