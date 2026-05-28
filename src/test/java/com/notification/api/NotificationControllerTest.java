@@ -85,11 +85,11 @@ class NotificationControllerTest {
 	}
 
 	@Test
-	@DisplayName("GET /{id}: 200 상태 반환")
+	@DisplayName("GET /{id}: 본인이면 200 상태 반환")
 	void getById_returns200() throws Exception {
-		when(service.getById(1L)).thenReturn(sampleResponse(1L));
+		when(service.getById(1L, "user-1")).thenReturn(sampleResponse(1L));
 
-		mockMvc.perform(get("/api/v1/notifications/1"))
+		mockMvc.perform(get("/api/v1/notifications/1").header("X-User-Id", "user-1"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.id").value(1))
 				.andExpect(jsonPath("$.recipientId").value("user-1"));
@@ -98,18 +98,27 @@ class NotificationControllerTest {
 	@Test
 	@DisplayName("GET /{id}: 없으면 404")
 	void getById_notFound_returns404() throws Exception {
-		when(service.getById(999L)).thenThrow(new NotificationNotFoundException(999L));
+		when(service.getById(999L, "user-1")).thenThrow(new NotificationNotFoundException(999L));
 
-		mockMvc.perform(get("/api/v1/notifications/999"))
+		mockMvc.perform(get("/api/v1/notifications/999").header("X-User-Id", "user-1"))
 				.andExpect(status().isNotFound());
 	}
 
 	@Test
-	@DisplayName("GET 목록: recipientId 기준 배열 반환")
+	@DisplayName("GET /{id}: 다른 사용자는 403 (IDOR 방지)")
+	void getById_wrongUser_returns403() throws Exception {
+		when(service.getById(2L, "intruder")).thenThrow(new NotificationAccessDeniedException(2L));
+
+		mockMvc.perform(get("/api/v1/notifications/2").header("X-User-Id", "intruder"))
+				.andExpect(status().isForbidden());
+	}
+
+	@Test
+	@DisplayName("GET 목록: X-User-Id 본인 알림 배열 반환")
 	void list_returns200() throws Exception {
 		when(service.list("user-1", false)).thenReturn(List.of(sampleResponse(1L), sampleResponse(2L)));
 
-		mockMvc.perform(get("/api/v1/notifications").param("recipientId", "user-1"))
+		mockMvc.perform(get("/api/v1/notifications").header("X-User-Id", "user-1"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.length()").value(2));
 	}

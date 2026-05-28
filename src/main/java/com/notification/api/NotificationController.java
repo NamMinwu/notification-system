@@ -37,15 +37,18 @@ public class NotificationController {
 	}
 
 	@GetMapping("/{id}")
-	public NotificationResponse getById(@PathVariable Long id) {
-		return service.getById(id);
+	public NotificationResponse getById(
+			@PathVariable Long id,
+			@RequestHeader("X-User-Id") String userId) {
+		return service.getById(id, userId);
 	}
 
+	/** 요청자(X-User-Id) 본인의 알림 목록만 조회. */
 	@GetMapping
 	public List<NotificationResponse> list(
-			@RequestParam String recipientId,
+			@RequestHeader("X-User-Id") String userId,
 			@RequestParam(defaultValue = "false") boolean unreadOnly) {
-		return service.list(recipientId, unreadOnly);
+		return service.list(userId, unreadOnly);
 	}
 
 	@PatchMapping("/{id}/read")

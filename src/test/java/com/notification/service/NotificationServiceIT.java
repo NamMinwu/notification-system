@@ -77,16 +77,25 @@ class NotificationServiceIT {
 	}
 
 	@Test
-	@DisplayName("getById: 존재하면 상태 반환, 없으면 NotFound")
+	@DisplayName("getById: 본인 알림은 반환, 없으면 NotFound")
 	void getById() {
 		Long id = service.create(request("evt-1", "user-1")).id();
 
-		NotificationResponse res = service.getById(id);
+		NotificationResponse res = service.getById(id, "user-1");
 		assertThat(res.id()).isEqualTo(id);
 		assertThat(res.recipientId()).isEqualTo("user-1");
 
-		assertThatThrownBy(() -> service.getById(999_999L))
+		assertThatThrownBy(() -> service.getById(999_999L, "user-1"))
 				.isInstanceOf(NotificationNotFoundException.class);
+	}
+
+	@Test
+	@DisplayName("getById: 다른 사용자가 조회하면 AccessDenied (IDOR 방지)")
+	void getById_wrongUser_denied() {
+		Long id = service.create(request("evt-1", "user-1")).id();
+
+		assertThatThrownBy(() -> service.getById(id, "intruder"))
+				.isInstanceOf(NotificationAccessDeniedException.class);
 	}
 
 	@Test

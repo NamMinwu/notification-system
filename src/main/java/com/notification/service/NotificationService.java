@@ -42,6 +42,9 @@ public class NotificationService {
 			Notification saved = repository.saveAndFlush(n);
 			return new CreateNotificationResponse(saved.getId(), saved.getStatus(), false);
 		} catch (DataIntegrityViolationException conflict) {
+			// 충돌을 일으킨 기존 알림을 멱등 반환. 재조회가 비는 경우는 충돌과 재조회 사이에
+			// 그 행이 삭제된 경우뿐인데, 삭제는 retention(기본 비활성, 30일+ 경과분)만 수행하므로
+			// 실질적으로 불가능하다. 그 희박한 anomaly는 원래 예외를 그대로 전파한다.
 			Notification existing = repository
 					.findByEventIdAndRecipientIdAndChannelAndNotificationType(
 							req.eventId(), req.recipientId(), req.channel(), req.notificationType())
@@ -51,17 +54,21 @@ public class NotificationService {
 	}
 
 	@Transactional(readOnly = true)
-	public NotificationResponse getById(Long id) {
-		return repository.findById(id)
-				.map(NotificationResponse::from)
+	public NotificationResponse getById(Long id, String requesterId) {
+		Notification n = repository.findById(id)
 				.orElseThrow(() -> new NotificationNotFoundException(id));
+		if (!n.getRecipientId().equals(requesterId)) {
+			throw new NotificationAccessDeniedException(id);
+		}
+		return NotificationResponse.from(n);
 	}
 
+	/** 요청자 본인의 알림만 조회한다(수신자 = 요청자). */
 	@Transactional(readOnly = true)
-	public List<NotificationResponse> list(String recipientId, boolean unreadOnly) {
+	public List<NotificationResponse> list(String requesterId, boolean unreadOnly) {
 		List<Notification> notifications = unreadOnly
-				? repository.findByRecipientIdAndReadOrderByCreatedAtDesc(recipientId, false)
-				: repository.findByRecipientIdOrderByCreatedAtDesc(recipientId);
+				? repository.findByRecipientIdAndReadOrderByCreatedAtDesc(requesterId, false)
+				: repository.findByRecipientIdOrderByCreatedAtDesc(requesterId);
 		return notifications.stream().map(NotificationResponse::from).toList();
 	}
 
