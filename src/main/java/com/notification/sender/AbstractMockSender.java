@@ -1,8 +1,8 @@
 package com.notification.sender;
 
 import com.notification.domain.Notification;
-import com.notification.service.NotificationRenderer;
 import com.notification.service.RenderedMessage;
+import com.notification.service.TemplateRenderer;
 import java.util.concurrent.ThreadLocalRandom;
 import lombok.extern.slf4j.Slf4j;
 
@@ -17,9 +17,9 @@ public abstract class AbstractMockSender implements NotificationSender {
 	private static final String PERMANENT_PREFIX = "permanent-fail-";
 
 	private final double failureRate;
-	private final NotificationRenderer renderer;
+	private final TemplateRenderer renderer;
 
-	protected AbstractMockSender(double failureRate, NotificationRenderer renderer) {
+	protected AbstractMockSender(double failureRate, TemplateRenderer renderer) {
 		this.failureRate = failureRate;
 		this.renderer = renderer;
 	}
@@ -36,7 +36,8 @@ public abstract class AbstractMockSender implements NotificationSender {
 		if (failureRate > 0 && ThreadLocalRandom.current().nextDouble() < failureRate) {
 			throw new SenderTransientException("SEND_TRANSIENT", "무작위 일시 실패(failureRate)");
 		}
-		RenderedMessage message = renderer.render(notification);
+		RenderedMessage message = renderer.render(
+				notification.getNotificationType(), notification.getChannel(), notification.getPayload());
 		log.info("[MOCK-{}] sent id={} recipient={} subject='{}' body='{}'",
 				channel(), notification.getId(), recipient, message.subject(), message.body());
 	}

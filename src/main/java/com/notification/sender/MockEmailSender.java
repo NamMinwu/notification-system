@@ -2,13 +2,13 @@ package com.notification.sender;
 
 import com.notification.config.NotificationProperties;
 import com.notification.domain.NotificationChannel;
-import com.notification.service.NotificationRenderer;
+import com.notification.service.TemplateRenderer;
 import org.springframework.stereotype.Component;
 
 @Component
 public class MockEmailSender extends AbstractMockSender {
 
-	public MockEmailSender(NotificationProperties properties, NotificationRenderer renderer) {
+	public MockEmailSender(NotificationProperties properties, TemplateRenderer renderer) {
 		super(properties.mockSender().failureRate(), renderer);
 	}
 

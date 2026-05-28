@@ -3,13 +3,11 @@ package com.notification.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.notification.domain.Notification;
 import com.notification.domain.NotificationChannel;
 import com.notification.domain.NotificationType;
 import com.notification.exception.InvalidTemplateException;
 import com.notification.support.DatabaseCleaner;
 import com.notification.support.IntegrationTest;
-import java.time.Instant;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -23,7 +21,7 @@ class TemplateServiceIT {
 	private TemplateService templateService;
 
 	@Autowired
-	private NotificationRenderer renderer;
+	private TemplateRenderer renderer;
 
 	@Autowired
 	private DatabaseCleaner databaseCleaner;
@@ -31,18 +29,6 @@ class TemplateServiceIT {
 	@BeforeEach
 	void setUp() {
 		databaseCleaner.clean();
-	}
-
-	private Notification notification(NotificationType type, NotificationChannel channel,
-			Map<String, Object> payload) {
-		return Notification.builder()
-				.recipientId("user-1")
-				.notificationType(type)
-				.channel(channel)
-				.eventId("evt-1")
-				.payload(payload)
-				.createdAt(Instant.parse("2026-05-28T10:00:00Z"))
-				.build();
 	}
 
 	@Test
@@ -81,9 +67,9 @@ class TemplateServiceIT {
 		templateService.upsert(NotificationType.PAYMENT_CONFIRMED, NotificationChannel.EMAIL, "ko",
 				"{{userName}}님 결제", "{{userName}}님 {{amount}}원 결제 완료");
 
-		RenderedMessage msg = renderer.render(notification(
+		RenderedMessage msg = renderer.render(
 				NotificationType.PAYMENT_CONFIRMED, NotificationChannel.EMAIL,
-				Map.of("userName", "홍길동", "amount", 5000)));
+				Map.of("userName", "홍길동", "amount", 5000));
 
 		assertThat(msg.subject()).isEqualTo("홍길동님 결제");
 		assertThat(msg.body()).isEqualTo("홍길동님 5000원 결제 완료");
@@ -95,8 +81,8 @@ class TemplateServiceIT {
 		templateService.upsert(NotificationType.PAYMENT_CONFIRMED, NotificationChannel.EMAIL, "ko",
 				null, "{{a}}-{{b}}");
 
-		RenderedMessage msg = renderer.render(notification(
-				NotificationType.PAYMENT_CONFIRMED, NotificationChannel.EMAIL, Map.of("a", "X")));
+		RenderedMessage msg = renderer.render(
+				NotificationType.PAYMENT_CONFIRMED, NotificationChannel.EMAIL, Map.of("a", "X"));
 
 		assertThat(msg.body()).isEqualTo("X-");
 	}
@@ -104,8 +90,8 @@ class TemplateServiceIT {
 	@Test
 	@DisplayName("render: 템플릿이 없으면 타입명 fallback")
 	void render_noTemplate_fallback() {
-		RenderedMessage msg = renderer.render(notification(
-				NotificationType.CLASS_REMINDER_D1, NotificationChannel.IN_APP, Map.of()));
+		RenderedMessage msg = renderer.render(
+				NotificationType.CLASS_REMINDER_D1, NotificationChannel.IN_APP, Map.of());
 
 		assertThat(msg.body()).isEqualTo("CLASS_REMINDER_D1");
 	}

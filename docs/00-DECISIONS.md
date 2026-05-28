@@ -148,8 +148,9 @@ notification:
 | 실패 사유 기록 | **컬럼 방식** (`last_error_code/message/at`, `retry_count`) + App Log | 마지막 에러는 DB, 전체 이력은 로그 시스템 위임 |
 | 실패 분류 | retryable vs permanent | 영구 실패(잘못된 이메일 등)는 즉시 DEAD_LETTER |
 | Mock Sender | **설정 가능 실패율 + 이메일 패턴 강제 실패** | `fail-*@*` 무조건 실패, `permanent-fail-*` 즉시 DEAD_LETTER → 재시도/DLQ 테스트 |
-| 템플릿 엔진 | **Mustache (JMustache)** | logic-less, XSS 안전, 단순 치환에 적합 |
-| 템플릿 저장 | **DB 테이블 + 캐싱** | 운영 중 문구 수정, 버전/A-B, 다국어 확장 |
+| 템플릿 엔진 | **Mustache (JMustache)** | logic-less, XSS 안전, 단순 치환에 적합. 업서트 시 문법 검증 |
+| 템플릿 소유권 | **알림 서비스가 소유** | 표현(문구)은 발송 책임자 관심사. 호출자는 payload(데이터)만 전달 |
+| 템플릿 저장/렌더 | **DB 테이블 + 발송 시 렌더링** (`TemplateRenderer` 인터페이스) | 운영 중 문구 수정·다국어. "데이터는 등록 시 고정, 표현은 발송 시 최신 템플릿". 캐시는 다중 인스턴스 무효화 불가로 미도입(항상 DB 조회) |
 | 수동 재시도 | **retry_count 유지** | 무한 루프 자동 차단, 누적 이력 보존 |
 | 과거 시각 예약 | **허용 (즉시 발송)** | 배치 등록 후 일괄 발송 유연성 |
 | 다국어 | **language 컬럼만 추가, 'ko' 고정** | 확장성 확보, 현재 미사용 |
@@ -184,6 +185,6 @@ notification:
 | 재시작 유실 X | DB가 큐 역할 |
 | 다중 인스턴스 중복 처리 X | `FOR UPDATE SKIP LOCKED` |
 | (선택) 발송 스케줄링 | `scheduled_at` 컬럼 + CANCELLED 상태 |
-| (선택) 템플릿 관리 | DB 템플릿 + Mustache + 캐싱 |
+| (선택) 템플릿 관리 | 알림 서비스 소유 DB 템플릿 + Mustache 발송 시 렌더링 (`TemplateRenderer` 인터페이스) |
 | (선택) 읽음 처리 | 멱등 UPDATE (`WHERE is_read = false`) |
 | (선택) 수동 재시도 | retry_count 유지 + 단건/배치 API |
