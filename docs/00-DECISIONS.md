@@ -132,6 +132,18 @@ notification:
 
 **테스트 프로파일(`application-test.yml`)** 에서는 타임아웃/주기를 초 단위로 단축한다 (예: lease 10초). 단, 시간 의존 단위 테스트는 **Clock 주입**으로 결정적으로 검증한다.
 
+### 커넥션 풀 ↔ Semaphore ↔ 다중 인스턴스 사이징
+
+발송 병렬화(Virtual Thread)에서 각 발송은 자기 트랜잭션 = 커넥션 1개를 점유하므로, 세 값이 함께 묶인다.
+
+- **인스턴스 내부**: `worker.semaphore-permits(16) < datasource.hikari.maximum-pool-size(20)` — 세마포어가 외부 호출 동시성을 제한하되, 풀보다 작아야 발송 스레드가 커넥션 대기로 막히지 않는다(claim 트랜잭션·API 트래픽 여유 확보).
+- **다중 인스턴스(전역 상한)**: HikariCP 풀은 **인스턴스당**이고, 진짜 상한은 PostgreSQL `max_connections`(기본 100). 따라서
+  ```
+  인스턴스 수 × 인스턴스당 풀 크기 + 여유 ≤ postgres max_connections
+  ```
+  풀 20 기준 약 4인스턴스가 안전선. 더 늘리려면 **인스턴스당 풀/세마포어를 줄이거나**(큰 풀은 DB 내부 경합만 키움) **PgBouncer**(커넥션 풀러)를 앞에 둔다. "다중 인스턴스 = 풀을 키운다"가 아니라 그 반대.
+- `SELECT ... FOR UPDATE SKIP LOCKED` 덕분에 인스턴스끼리 풀을 공유하지 않고 서로 다른 행을 처리하므로, DB가 보는 총 커넥션만 인스턴스 수에 선형 증가한다. (다중 워커가 각 알림을 정확히 1회 처리함은 `WorkerConcurrencyIT`로 검증.)
+
 ---
 
 ## 4. 구현 디테일
