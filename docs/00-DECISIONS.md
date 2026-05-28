@@ -10,7 +10,7 @@
 | 항목 | 채택 | 근거 |
 |---|---|---|
 | 데이터베이스 | **PostgreSQL 16** | `FOR UPDATE SKIP LOCKED`, `ON CONFLICT`, JSONB, Partial Index 모두 네이티브 지원 |
-| 언어/런타임 | **Java 21** | Virtual Thread 활용 (Worker 발송 병렬화) |
+| 언어/런타임 | **Java 21** | 최신 LTS (record/sealed/switch 패턴 등). 향후 인스턴스 내 병렬 발송 시 Virtual Thread도 선택지 |
 | 프레임워크 | **Spring Boot 4.0.x + JPA(Hibernate)** | 과제 지정 스택 (최신 GA) |
 | 빌드 도구 | **Gradle (Kotlin DSL)** | 최신 Spring Boot 권장, 타입 안전한 빌드 스크립트 |
 | 마이그레이션 | **Flyway** | 버전 관리되는 스키마, 운영 전환 가능 |
@@ -111,8 +111,6 @@ notification:
   sweeper:
     interval: 1m          # 좀비 감지 주기
     lease-timeout: 5m     # Sender timeout × 2 (좀비 판정 기준)
-  worker:
-    semaphore-permits: 16 # Virtual Thread 동시 발송 제한 (DB 풀 크기와 함께 튜닝)
   retention:
     enabled: false        # 기본 비활성 (운영 시 활성화)
     sent-days: 30
@@ -132,16 +130,16 @@ notification:
 
 **테스트 프로파일(`application-test.yml`)** 에서는 타임아웃/주기를 초 단위로 단축한다 (예: lease 10초). 단, 시간 의존 단위 테스트는 **Clock 주입**으로 결정적으로 검증한다.
 
-### 커넥션 풀 ↔ Semaphore ↔ 다중 인스턴스 사이징
+### 처리량 확장 ↔ 커넥션 풀 ↔ 다중 인스턴스
 
-발송 병렬화(Virtual Thread)에서 각 발송은 자기 트랜잭션 = 커넥션 1개를 점유하므로, 세 값이 함께 묶인다.
+발송은 **인스턴스당 순차**(배치 내 1건씩)다. 처리량 확장의 1차 수단은 **인스턴스 추가**이며, `FOR UPDATE SKIP LOCKED`가 인스턴스 간 중복 없이 작업을 분배한다.
 
-- **인스턴스 내부**: `worker.semaphore-permits(16) < datasource.hikari.maximum-pool-size(20)` — 세마포어가 외부 호출 동시성을 제한하되, 풀보다 작아야 발송 스레드가 커넥션 대기로 막히지 않는다(claim 트랜잭션·API 트래픽 여유 확보).
-- **다중 인스턴스(전역 상한)**: HikariCP 풀은 **인스턴스당**이고, 진짜 상한은 PostgreSQL `max_connections`(기본 100). 따라서
+- **인스턴스 내부 병렬은 의도적으로 미도입**: 요구사항은 Outbox(폴링·재시도·중복방지·복구)로 충족되고, 배치 내 병렬은 정확성과 무관한 throughput 노브일 뿐이다. 실제 sender I/O가 느리고 처리량 요구가 생기면 **고정 스레드풀(외부 한도 N)** 을 도입하되, 그때는 **발송을 트랜잭션 밖으로** 빼고 **sender 멱등성**을 함께 갖춘다(상세 비교: [01-ASYNC-RETRY](01-ASYNC-RETRY.md)).
+- **다중 인스턴스(전역 상한)**: HikariCP 풀은 **인스턴스당**이고 진짜 상한은 PostgreSQL `max_connections`(기본 100). 따라서
   ```
   인스턴스 수 × 인스턴스당 풀 크기 + 여유 ≤ postgres max_connections
   ```
-  풀 20 기준 약 4인스턴스가 안전선. 더 늘리려면 **인스턴스당 풀/세마포어를 줄이거나**(큰 풀은 DB 내부 경합만 키움) **PgBouncer**(커넥션 풀러)를 앞에 둔다. "다중 인스턴스 = 풀을 키운다"가 아니라 그 반대.
+  풀 20 기준 약 4인스턴스가 안전선. 더 늘리려면 **인스턴스당 풀을 줄이거나** **PgBouncer**(커넥션 풀러)를 둔다. "다중 인스턴스 = 풀을 키운다"가 아니라 그 반대.
 - `SELECT ... FOR UPDATE SKIP LOCKED` 덕분에 인스턴스끼리 풀을 공유하지 않고 서로 다른 행을 처리하므로, DB가 보는 총 커넥션만 인스턴스 수에 선형 증가한다. (다중 워커가 각 알림을 정확히 1회 처리함은 `WorkerConcurrencyIT`로 검증.)
 
 ---
@@ -155,7 +153,7 @@ notification:
 | 디스패치 추상화 | **`NotificationDispatcher` 인터페이스** | 향후 Kafka Consumer로 구현체 교체 |
 | 채널 추상화 | **`NotificationSender` 인터페이스** (채널별 구현) | PUSH/SMS 확장 시 구현체만 추가 |
 | 다중 인스턴스 | **`SELECT FOR UPDATE SKIP LOCKED`** | 워커 간 행 분배, 락 대기 없음 |
-| **Worker 발송 모델** | **Virtual Thread + Semaphore 병렬** | 배치 내 알림을 가상 스레드로 병렬 발송, 외부 부하는 Semaphore(기본 16, DB 풀과 함께 튜닝) 제한. 각 알림 = 독립 트랜잭션(실패 격리) |
+| **Worker 발송 모델** | **순차 발송 (인스턴스당)** | 배치 내 1건씩, 각 알림은 독립 트랜잭션(실패 격리). 처리량은 인스턴스 추가(SKIP LOCKED)로 확장. 인스턴스 내 병렬은 실 sender I/O 시 고정 풀로 도입 |
 | 좀비 복구 | **Lease + Sweeper** | `lease_expires_at` 만료 행을 PENDING 복구 |
 | 실패 사유 기록 | **컬럼 방식** (`last_error_code/message/at`, `retry_count`) + App Log | 마지막 에러는 DB, 전체 이력은 로그 시스템 위임 |
 | 실패 분류 | retryable vs permanent | 영구 실패(잘못된 이메일 등)는 즉시 DEAD_LETTER |

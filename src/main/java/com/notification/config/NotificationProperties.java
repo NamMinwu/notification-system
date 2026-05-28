@@ -10,7 +10,6 @@ public record NotificationProperties(
 		Retry retry,
 		Sender sender,
 		Sweeper sweeper,
-		Worker worker,
 		Retention retention,
 		MockSender mockSender,
 		boolean schedulingEnabled) {
@@ -30,9 +29,6 @@ public record NotificationProperties(
 	}
 
 	public record Sweeper(Duration interval, Duration leaseTimeout) {
-	}
-
-	public record Worker(int semaphorePermits) {
 	}
 
 	public record Retention(boolean enabled, int sentDays, int deadLetterDays) {

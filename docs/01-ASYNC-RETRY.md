@@ -19,7 +19,7 @@
    │  Sweeper        │ ◀───────────── │  NotificationWorker  │
    │ (좀비 복구)      │                │  (Polling Dispatcher)│
    └────────────────┘                └──────────┬───────────┘
-                                                 │ 3) Virtual Thread + Semaphore
+                                                 │ 3) 순차 dispatch (건별 독립 tx)
                                                  ▼
                                         ┌──────────────────┐
                                         │ NotificationSender│ (EMAIL / IN_APP, Mock)
@@ -77,20 +77,29 @@ API 스레드는 **DB에 쓰기만** 하고 끝난다. 실제 외부 발송(SMTP
        FOR UPDATE SKIP LOCKED            -- 다중 인스턴스 안전
   2. 픽업한 행을 PROCESSING으로 전이 + lease_expires_at = now + 5분
   3. (트랜잭션 커밋 → 락 해제, 하지만 상태가 PROCESSING이라 재픽업 안 됨)
-  4. 각 알림을 Virtual Thread로 병렬 발송 (Semaphore로 동시 수 제한)
+  4. 각 알림을 순차 발송 (건별 독립 트랜잭션)
        성공 → SENT
        일시 실패 → FAILED + retry_count++ + next_retry_at 계산
        영구 실패 → DEAD_LETTER
 ```
 
-### 3-3. Worker 발송 모델 — Virtual Thread + Semaphore
+### 3-3. Worker 발송 모델 — 순차 dispatch + 수평 확장
 
-배치로 픽업한 알림을 **하나씩 순차** 발송하면 외부 응답 지연이 누적된다.
-Java 21 Virtual Thread로 각 알림을 병렬 발송하되, 외부 시스템(SMTP) 보호를 위해
-`Semaphore`(기본 16, DB 커넥션 풀 크기와 함께 튜닝)로 동시 호출 수를 제한한다.
+배치 내 알림은 **인스턴스당 순차**로 발송한다. 각 알림 발송은 **독립 트랜잭션**이라 한 건 실패가
+다른 건에 영향을 주지 않는다(실패 격리). 우리 요구사항(비동기·재시도·중복방지·복구)은 모두
+Outbox 메커니즘으로 충족되며, **배치 내 병렬은 정확성과 무관한 throughput 노브**일 뿐이다.
 
-- 각 알림 발송은 **독립 트랜잭션**이다 → 한 건 실패가 다른 건에 영향 없음 (실패 격리).
-- `SKIP LOCKED`가 인스턴스 **간** 분배를 보장하고, Virtual Thread가 인스턴스 **내** 병렬을 담당한다.
+- **처리량 확장의 1차 수단은 인스턴스 추가**다. `SKIP LOCKED`가 인스턴스 간 중복 없이 작업을 분배하므로,
+  워커 인스턴스를 늘리면 선형에 가깝게 확장된다(검증: `WorkerConcurrencyIT`).
+- **인스턴스 내 병렬은 의도적으로 미도입**: 현재 sender는 Mock(즉시 반환)이라 병렬 이득이 없고,
+  발송을 트랜잭션 안에서 하는 한 동시성이 커넥션 풀에 묶여 가상 스레드 이점도 상쇄된다.
+
+**언제 인스턴스 내 병렬을 도입하나?** 실제 sender I/O가 느리고(예: SMTP 수백 ms) 단일 인스턴스
+처리량이 부족해질 때. 그때는 **외부 한도(N)에 맞춘 고정 스레드풀**을 쓰고, **발송을 트랜잭션 밖으로**
+빼서 I/O 동안 커넥션을 점유하지 않게 한다. 단, 이 경우 "발송 성공 ~ 결과 기록" 사이 창이 넓어져
+중복 발송 가능성이 커지므로 **sender 레벨 idempotency**(동일 message-id)가 함께 필요하다.
+(가상 스레드는 "외부를 의도적으로 제한"하는 본 워크로드보다, 외부가 무제한이라 대량 동시 I/O가
+필요한 경우에 적합하다.)
 
 ---
 
@@ -252,7 +261,6 @@ notification:
   sender:    { timeout: 2m }
   sweeper:   { interval: 1m, lease-timeout: 5m }
   scheduling-enabled: true
-  worker:    { semaphore-permits: 16 }
   retention: { enabled: false, sent-days: 30, dead-letter-days: 90 }
 ```
 

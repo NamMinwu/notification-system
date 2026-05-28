@@ -2,7 +2,7 @@
 spring:
   datasource:
     hikari:
-      maximum-pool-size: 20   # 동시성 테스트(다중 워커 병렬 발송)에서 커넥션 고갈 방지
+      maximum-pool-size: 20   # 동시성 테스트(동일 알림 다수 동시 생성/읽음)에서 커넥션 고갈 방지
   jpa:
     hibernate:
       ddl-auto: none
@@ -24,8 +24,6 @@ notification:
   sweeper:
     interval: 1s
     lease-timeout: 10s
-  worker:
-    semaphore-permits: 8
   retention:
     enabled: false
     sent-days: 30
