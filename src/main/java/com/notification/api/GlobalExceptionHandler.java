@@ -1,7 +1,9 @@
 package com.notification.api;
 
+import com.notification.exception.AdminForbiddenException;
 import com.notification.exception.NotificationAccessDeniedException;
 import com.notification.exception.NotificationNotFoundException;
+import com.notification.exception.NotificationNotRetryableException;
 import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -21,6 +23,16 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(NotificationAccessDeniedException.class)
 	ProblemDetail handleAccessDenied(NotificationAccessDeniedException e) {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, e.getMessage());
+	}
+
+	@ExceptionHandler(AdminForbiddenException.class)
+	ProblemDetail handleAdminForbidden(AdminForbiddenException e) {
+		return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, e.getMessage());
+	}
+
+	@ExceptionHandler(NotificationNotRetryableException.class)
+	ProblemDetail handleNotRetryable(NotificationNotRetryableException e) {
+		return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
 	}
 
 	@ExceptionHandler(MethodArgumentNotValidException.class)

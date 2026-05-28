@@ -1,7 +1,9 @@
 package com.notification.repository;
 
+import com.notification.api.dto.DeadLetterStat;
 import com.notification.domain.Notification;
 import com.notification.domain.NotificationChannel;
+import com.notification.domain.NotificationStatus;
 import com.notification.domain.NotificationType;
 import java.time.Instant;
 import java.util.List;
@@ -46,4 +48,24 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 	@Query("UPDATE Notification n SET n.read = true, n.readAt = :now, n.updatedAt = :now "
 			+ "WHERE n.recipientId = :recipientId AND n.read = false")
 	int markAllAsRead(@Param("recipientId") String recipientId, @Param("now") Instant now);
+
+	// --- 운영자 도구 (DEAD_LETTER 모니터링 / 배치 재시도) ---
+
+	List<Notification> findByStatusOrderByCreatedAtDesc(NotificationStatus status);
+
+	@Query("SELECT new com.notification.api.dto.DeadLetterStat(n.lastErrorCode, COUNT(n)) "
+			+ "FROM Notification n WHERE n.status = com.notification.domain.NotificationStatus.DEAD_LETTER "
+			+ "GROUP BY n.lastErrorCode ORDER BY COUNT(n) DESC")
+	List<DeadLetterStat> deadLetterStats();
+
+	/**
+	 * 배치 수동 재시도: DEAD_LETTER를 PENDING으로 재큐잉. errorCode가 null이면 전체.
+	 * WHERE가 DEAD_LETTER만 대상으로 하므로 상태 전이 불변식(DEAD_LETTER→PENDING)을 만족한다.
+	 */
+	@Modifying(clearAutomatically = true)
+	@Query("UPDATE Notification n SET n.status = com.notification.domain.NotificationStatus.PENDING, "
+			+ "n.nextRetryAt = :now, n.deadLetterAt = null, n.leaseExpiresAt = null, n.updatedAt = :now "
+			+ "WHERE n.status = com.notification.domain.NotificationStatus.DEAD_LETTER "
+			+ "AND (:errorCode IS NULL OR n.lastErrorCode = :errorCode)")
+	int requeueDeadLetters(@Param("errorCode") String errorCode, @Param("now") Instant now);
 }
