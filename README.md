@@ -16,9 +16,9 @@
 
 ## 기술 스택
 
-- Java 21, Spring Boot 3.3.x
+- Java 21, Spring Boot 4.0.x
 - Spring Data JPA (Hibernate), PostgreSQL 16, Flyway
-- Gradle (Kotlin DSL)
+- Gradle (Kotlin DSL), JMustache (템플릿 렌더링)
 - 테스트: JUnit 5, Testcontainers, AssertJ, Mockito, JaCoCo
 
 ## 상태

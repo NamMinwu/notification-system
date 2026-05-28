@@ -11,7 +11,7 @@
 |---|---|---|
 | 데이터베이스 | **PostgreSQL 16** | `FOR UPDATE SKIP LOCKED`, `ON CONFLICT`, JSONB, Partial Index 모두 네이티브 지원 |
 | 언어/런타임 | **Java 21** | Virtual Thread 활용 (Worker 발송 병렬화) |
-| 프레임워크 | **Spring Boot 3.3.x + JPA(Hibernate)** | 과제 지정 스택 |
+| 프레임워크 | **Spring Boot 4.0.x + JPA(Hibernate)** | 과제 지정 스택 (최신 GA) |
 | 빌드 도구 | **Gradle (Kotlin DSL)** | 최신 Spring Boot 권장, 타입 안전한 빌드 스크립트 |
 | 마이그레이션 | **Flyway** | 버전 관리되는 스키마, 운영 전환 가능 |
 | 인증/인가 | **`X-User-Id` 헤더 기반 간소화** | 과제 허용 범위. 권한 검증(본인 알림만 조회/읽음)은 유지 |

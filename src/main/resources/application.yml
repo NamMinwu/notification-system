@@ -1,0 +1,47 @@
+spring:
+  application:
+    name: notification-system
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/notification}
+    username: ${SPRING_DATASOURCE_USERNAME:notification}
+    password: ${SPRING_DATASOURCE_PASSWORD:notification}
+  jpa:
+    hibernate:
+      ddl-auto: none          # Flyway가 스키마를 소유
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+# 알림 시스템 정책 (운영 중 조정 가능, ADR 00-DECISIONS 참고)
+notification:
+  polling:
+    interval: 5s
+    batch-size: 50
+  retry:
+    max-attempts: 5
+    initial-backoff: 1m
+    multiplier: 2
+    max-backoff: 16m
+    jitter-max: 30s
+  sender:
+    timeout: 2m
+  sweeper:
+    interval: 1m
+    lease-timeout: 5m
+  worker:
+    semaphore-permits: 50
+  retention:
+    enabled: false
+    sent-days: 30
+    dead-letter-days: 90
