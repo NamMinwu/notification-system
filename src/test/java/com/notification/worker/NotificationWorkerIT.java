@@ -83,7 +83,6 @@ class NotificationWorkerIT {
 
 		Notification n = reload(id);
 		assertThat(n.getStatus()).isEqualTo(NotificationStatus.SENT);
-		assertThat(n.getSentAt()).isNotNull();
 		assertThat(n.getLeaseExpiresAt()).isNull();
 	}
 

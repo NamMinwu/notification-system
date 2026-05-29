@@ -159,7 +159,7 @@ notification:
 | 다중 인스턴스 | **`SELECT FOR UPDATE SKIP LOCKED`** | 워커 간 행 분배, 락 대기 없음 |
 | **Worker 발송 모델** | **고정 스레드풀(concurrency=16)** | 외부 한도에 맞춘 의도적 동시성 제한(중간 기준+낙관 여유). 각 알림 = 독립 트랜잭션(실패 격리). 수평 확장은 인스턴스 추가(SKIP LOCKED) |
 | 좀비 복구 | **Lease + Sweeper** | `lease_expires_at` 만료 행을 PENDING 복구 |
-| 실패 사유 기록 | **컬럼 방식** (`last_error_code/message/at`, `retry_count`) + App Log | 마지막 에러는 DB, 전체 이력은 로그 시스템 위임 |
+| 실패 사유 기록 | **컬럼 방식** (`last_error_code/message`, `retry_count`, `updated_at`) + App Log | 마지막 에러·전이 시각은 DB, 전체 이력은 로그 시스템 위임 |
 | 실패 분류 | retryable vs permanent | 영구 실패(잘못된 이메일 등)는 즉시 DEAD_LETTER |
 | Mock Sender | **설정 가능 실패율 + 이메일 패턴 강제 실패** | `fail-*@*` 무조건 실패, `permanent-fail-*` 즉시 DEAD_LETTER → 재시도/DLQ 테스트 |
 | 템플릿 엔진 | **Mustache (JMustache)** | logic-less, XSS 안전, 단순 치환에 적합. 업서트 시 문법 검증 |

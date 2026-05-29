@@ -36,7 +36,7 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 	@org.springframework.transaction.annotation.Transactional
 	@Modifying(clearAutomatically = true)
 	@Query("UPDATE Notification n SET n.status = com.notification.domain.NotificationStatus.PENDING, "
-			+ "n.leaseExpiresAt = null, n.processingStartedAt = null, n.updatedAt = :now "
+			+ "n.leaseExpiresAt = null, n.updatedAt = :now "
 			+ "WHERE n.status = com.notification.domain.NotificationStatus.PROCESSING "
 			+ "AND n.leaseExpiresAt < :now")
 	int recoverExpiredLeases(@Param("now") Instant now);
@@ -86,7 +86,7 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 	 */
 	@Modifying(clearAutomatically = true)
 	@Query("UPDATE Notification n SET n.status = com.notification.domain.NotificationStatus.PENDING, "
-			+ "n.nextRetryAt = :now, n.deadLetterAt = null, n.leaseExpiresAt = null, n.updatedAt = :now "
+			+ "n.nextRetryAt = :now, n.leaseExpiresAt = null, n.updatedAt = :now "
 			+ "WHERE n.status = com.notification.domain.NotificationStatus.DEAD_LETTER "
 			+ "AND n.lastErrorCode = :errorCode")
 	int requeueDeadLetters(@Param("errorCode") String errorCode, @Param("now") Instant now);
