@@ -1,11 +1,13 @@
 package com.notification.worker;
 
 import com.notification.config.NotificationProperties;
+import jakarta.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -68,6 +70,20 @@ public class NotificationWorker {
 		} catch (RuntimeException e) {
 			// 단건의 예기치 못한 실패가 배치의 나머지를 막지 않도록 격리
 			log.error("notification processing failed unexpectedly id={}", id, e);
+		}
+	}
+
+	/** Graceful shutdown: 신규 제출은 막고 진행 중 발송은 마치게 한다(미완료분은 PROCESSING으로 남아 Sweeper가 복구). */
+	@PreDestroy
+	void shutdownSendExecutor() {
+		sendExecutor.shutdown();
+		try {
+			if (!sendExecutor.awaitTermination(30, TimeUnit.SECONDS)) {
+				sendExecutor.shutdownNow();
+			}
+		} catch (InterruptedException e) {
+			sendExecutor.shutdownNow();
+			Thread.currentThread().interrupt();
 		}
 	}
 }

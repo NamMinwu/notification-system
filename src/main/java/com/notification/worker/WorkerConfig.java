@@ -18,10 +18,11 @@ public class WorkerConfig {
 
 	/**
 	 * 발송 전용 고정 스레드풀. 동시 발송 수 = {@code worker.concurrency}로 외부 자원 한도에 맞춰
-	 * 의도적으로 제한한다. 큐가 차면 CallerRuns로 호출 스레드가 처리해 자연스러운 backpressure를 준다.
-	 * destroyMethod=shutdown으로 종료 시 진행 중 작업을 마치게 한다(graceful).
+	 * 의도적으로 제한한다. 큐 용량을 batch-size로 두어 한 배치(claim 단위)는 거부 없이 모두 수용한다
+	 * (단일 인스턴스에선 CallerRuns가 트리거되지 않음). graceful shutdown은
+	 * {@code NotificationWorker.@PreDestroy}에서 awaitTermination으로 처리하므로 destroyMethod는 비활성.
 	 */
-	@Bean(destroyMethod = "shutdown")
+	@Bean(destroyMethod = "")
 	public ExecutorService sendExecutor(NotificationProperties properties) {
 		int concurrency = properties.worker().concurrency();
 		int queueCapacity = properties.polling().batchSize();
