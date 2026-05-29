@@ -67,17 +67,22 @@ class NotificationConcurrencyIT {
 	}
 
 	@Test
-	@DisplayName("동일 알림 50건 동시 읽음 처리 → 예외 없이 최종 읽음 상태 일관")
-	void concurrentMarkAsRead_idempotent() throws Exception {
+	@DisplayName("동일 알림 50건 동시 읽음 → 읽음 처리되고 read_at이 단일 값으로 고정(첫 시각 유지)")
+	void concurrentMarkAsRead_readAtFixed() throws Exception {
 		Long id = service.create(new CreateNotificationRequest(
 				"user-1", NotificationType.ENROLLMENT_COMPLETE, NotificationChannel.IN_APP,
 				"evt-1", Map.of(), null)).id();
 
 		runConcurrently(50, () -> service.markAsRead(id, "user-1"));
 
-		var reloaded = repository.findById(id).orElseThrow();
-		assertThat(reloaded.isRead()).isTrue();
-		assertThat(reloaded.getReadAt()).isNotNull();
+		var afterBurst = repository.findById(id).orElseThrow();
+		assertThat(afterBurst.isRead()).isTrue();
+		assertThat(afterBurst.getReadAt()).isNotNull();
+
+		// 추가 읽음 호출은 멱등(WHERE is_read=false) → read_at이 바뀌지 않음 = 첫 시각 고정 입증
+		service.markAsRead(id, "user-1");
+		assertThat(repository.findById(id).orElseThrow().getReadAt())
+				.isEqualTo(afterBurst.getReadAt());
 	}
 
 	private void runConcurrently(int threadCount, Runnable action) throws InterruptedException {
