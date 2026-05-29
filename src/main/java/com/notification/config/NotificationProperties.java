@@ -32,7 +32,13 @@ public record NotificationProperties(
 	public record Sweeper(Duration interval, Duration leaseTimeout) {
 	}
 
-	public record Worker(int semaphorePermits) {
+	/**
+	 * 인스턴스당 발송 동시성(고정 스레드풀 크기). 외부 자원 한도에 맞춰 의도적으로 제한한다.
+	 * <p>불변식: {@code lease-timeout ≥ ⌈batch-size/concurrency⌉ × sender-timeout + 마진}.
+	 * 예) batch=50, concurrency=16, sender-timeout=2m → ⌈50/16⌉×2m=8m → lease 10m(마진 25%).
+	 * claim 시점에 배치 전체에 lease를 걸므로, 배치 마지막 건이 끝나기 전 Sweeper가 좀비로 오인하면 안 된다.
+	 */
+	public record Worker(int concurrency) {
 	}
 
 	public record Retention(boolean enabled, int sentDays, int deadLetterDays) {

@@ -63,3 +63,29 @@ tasks.jacocoTestReport {
 		html.required.set(true)
 	}
 }
+
+tasks.jacocoTestCoverageVerification {
+	dependsOn(tasks.test)
+	// 부트스트랩 클래스(main)는 단위 검증 대상에서 제외
+	classDirectories.setFrom(files(classDirectories.files.map {
+		fileTree(it) { exclude("com/notification/NotificationSystemApplication.class") }
+	}))
+	violationRules {
+		rule {
+			limit {
+				counter = "LINE"
+				value = "COVEREDRATIO"
+				minimum = "0.80".toBigDecimal()
+			}
+			limit {
+				counter = "BRANCH"
+				value = "COVEREDRATIO"
+				minimum = "0.70".toBigDecimal()
+			}
+		}
+	}
+}
+
+tasks.check {
+	dependsOn(tasks.jacocoTestCoverageVerification)
+}

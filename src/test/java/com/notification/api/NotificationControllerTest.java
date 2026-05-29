@@ -86,6 +86,25 @@ class NotificationControllerTest {
 	}
 
 	@Test
+	@DisplayName("POST: 깨진 JSON 본문은 400 (내부 파싱 상세 미노출)")
+	void create_malformedJson_returns400() throws Exception {
+		mockMvc.perform(post("/api/v1/notifications")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"recipientId\": "))   // 잘린/깨진 JSON
+				.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	@DisplayName("POST: 잘못된 enum 값은 400")
+	void create_invalidEnum_returns400() throws Exception {
+		mockMvc.perform(post("/api/v1/notifications")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{"recipientId":"user-1","notificationType":"NOPE","channel":"EMAIL"}"""))
+				.andExpect(status().isBadRequest());
+	}
+
+	@Test
 	@DisplayName("GET /{id}: 본인이면 200 상태 반환")
 	void getById_returns200() throws Exception {
 		when(service.getById(1L, "user-1")).thenReturn(sampleResponse(1L));

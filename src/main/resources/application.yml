@@ -6,7 +6,7 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME:notification}
     password: ${SPRING_DATASOURCE_PASSWORD:notification}
     hikari:
-      maximum-pool-size: 20   # 병렬 발송(worker.semaphore-permits)보다 크게
+      maximum-pool-size: 20   # ≥ worker.concurrency(16) + API 여유. 다중 인스턴스 시 인스턴스수×풀 ≤ PG max_connections
   jpa:
     hibernate:
       ddl-auto: none          # Flyway가 스키마를 소유
@@ -41,9 +41,9 @@ notification:
     timeout: 2m
   sweeper:
     interval: 1m
-    lease-timeout: 5m
+    lease-timeout: 10m    # ≥ ⌈batch/concurrency⌉ × sender-timeout + 마진 (⌈50/16⌉×2m=8m → 10m)
   worker:
-    semaphore-permits: 16
+    concurrency: 16       # 인스턴스당 발송 동시성(고정 풀). 중간 기준 + 낙관(~10) 여유
   retention:
     enabled: false
     sent-days: 30

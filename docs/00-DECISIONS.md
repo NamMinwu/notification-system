@@ -10,7 +10,7 @@
 | 항목 | 채택 | 근거 |
 |---|---|---|
 | 데이터베이스 | **PostgreSQL 16** | `FOR UPDATE SKIP LOCKED`, `ON CONFLICT`, JSONB, Partial Index 모두 네이티브 지원 |
-| 언어/런타임 | **Java 21** | Virtual Thread 활용 (Worker 발송 병렬화) |
+| 언어/런타임 | **Java 21** | 최신 LTS (record/sealed/switch 패턴 등). 향후 인스턴스 내 병렬 발송 시 Virtual Thread도 선택지 |
 | 프레임워크 | **Spring Boot 4.0.x + JPA(Hibernate)** | 과제 지정 스택 (최신 GA) |
 | 빌드 도구 | **Gradle (Kotlin DSL)** | 최신 Spring Boot 권장, 타입 안전한 빌드 스크립트 |
 | 마이그레이션 | **Flyway** | 버전 관리되는 스키마, 운영 전환 가능 |
@@ -110,9 +110,9 @@ notification:
     timeout: 2m           # Mock이지만 설계상 외부 호출 타임아웃
   sweeper:
     interval: 1m          # 좀비 감지 주기
-    lease-timeout: 5m     # Sender timeout × 2 (좀비 판정 기준)
+    lease-timeout: 10m    # ≥ ⌈batch/concurrency⌉ × sender-timeout + 마진 (⌈50/16⌉×2m=8m)
   worker:
-    semaphore-permits: 16 # Virtual Thread 동시 발송 제한 (DB 풀 크기와 함께 튜닝)
+    concurrency: 16       # 인스턴스당 발송 동시성(고정 풀). 중간 기준 + 낙관(~10) 여유
   retention:
     enabled: false        # 기본 비활성 (운영 시 활성화)
     sent-days: 30
@@ -126,11 +126,25 @@ notification:
 | 최대 재시도 | 5회 | 1+2+4+8+16 ≈ 31분, 일시 장애 평균 복구 시간 내 |
 | Backoff | exp + jitter | 부하 분산, 일시/장기 장애 모두 대응 |
 | Sender 타임아웃 | 2분 | 외부 SMTP 가정값 |
-| Lease 타임아웃 | 5분 | Sender 타임아웃 × 2 + 마진 (정상 처리 오인 방지) |
+| **발송 동시성** | **16 (고정 풀)** | 인스턴스당 동시 발송 한도. 중간 기준 + 낙관(~10) 여유 |
+| Lease 타임아웃 | 10분 | **불변식** `≥ ⌈batch/concurrency⌉ × sender-timeout + 마진` (⌈50/16⌉×2분=8분). 배치 마지막 건이 끝나기 전 좀비 오인 방지 |
 | Sweeper 주기 | 1분 | 좀비 복구 지연 vs DB 부하 |
 | **Retention** | **잡 구현 + 기본 비활성** | 설계 역량은 보이되, 과제 데이터 오삭제 방지 (SENT 30일 / DEAD_LETTER 90일) |
 
 **테스트 프로파일(`application-test.yml`)** 에서는 타임아웃/주기를 초 단위로 단축한다 (예: lease 10초). 단, 시간 의존 단위 테스트는 **Clock 주입**으로 결정적으로 검증한다.
+
+### 처리량 확장 ↔ 커넥션 풀 ↔ 다중 인스턴스
+
+발송은 인스턴스당 **고정 스레드풀(concurrency=16)** 로 처리한다 — 외부 자원 한도에 맞춰 동시 발송을 의도적으로 제한하는 것이 설계 목표(**중간 시나리오 기준 + 낙관까지 여유**). 평소(중간)엔 풀이 대부분 idle(동시 1~4)이고, 낙관 부하(~10 동시) 시 한도까지 차오른다 — **재설계 없이 흡수**.
+
+- **왜 순차/Virtual Thread가 아니라 고정 풀인가**: 순차(동시성 1)는 낙관 흡수에 인스턴스를 ~10대 필요로 해 "여유"가 없다. Virtual Thread는 "외부를 무제한 동시 호출"에 적합한데 우리는 정반대로 **의도적 제한**이 목표라 거꾸로다. "딱 N 동시"를 가장 직접적으로 표현하는 게 고정 풀이다.
+- **처리량 확장 순서**: ① 인스턴스 추가(`SKIP LOCKED` 수평) → ② 폴링/배치 튜닝 → ③ `worker.concurrency` 상향. 동시성이 매우 커지면(수십+) **발송을 트랜잭션 밖으로** 빼고 **sender 멱등성**을 도입한다(상세: [01-ASYNC-RETRY](01-ASYNC-RETRY.md)).
+- **다중 인스턴스(전역 상한)**: HikariCP 풀은 **인스턴스당**이고 진짜 상한은 PostgreSQL `max_connections`(기본 100). 따라서
+  ```
+  인스턴스 수 × 인스턴스당 풀 크기 + 여유 ≤ postgres max_connections
+  ```
+  풀 20 기준 약 4인스턴스가 안전선. 더 늘리려면 **인스턴스당 풀을 줄이거나** **PgBouncer**(커넥션 풀러)를 둔다. "다중 인스턴스 = 풀을 키운다"가 아니라 그 반대.
+- `SELECT ... FOR UPDATE SKIP LOCKED` 덕분에 인스턴스끼리 풀을 공유하지 않고 서로 다른 행을 처리하므로, DB가 보는 총 커넥션만 인스턴스 수에 선형 증가한다. (다중 워커가 각 알림을 정확히 1회 처리함은 `WorkerConcurrencyIT`로 검증.)
 
 ---
 
@@ -143,7 +157,7 @@ notification:
 | 디스패치 추상화 | **`NotificationDispatcher` 인터페이스** | 향후 Kafka Consumer로 구현체 교체 |
 | 채널 추상화 | **`NotificationSender` 인터페이스** (채널별 구현) | PUSH/SMS 확장 시 구현체만 추가 |
 | 다중 인스턴스 | **`SELECT FOR UPDATE SKIP LOCKED`** | 워커 간 행 분배, 락 대기 없음 |
-| **Worker 발송 모델** | **Virtual Thread + Semaphore 병렬** | 배치 내 알림을 가상 스레드로 병렬 발송, 외부 부하는 Semaphore(기본 16, DB 풀과 함께 튜닝) 제한. 각 알림 = 독립 트랜잭션(실패 격리) |
+| **Worker 발송 모델** | **고정 스레드풀(concurrency=16)** | 외부 한도에 맞춘 의도적 동시성 제한(중간 기준+낙관 여유). 각 알림 = 독립 트랜잭션(실패 격리). 수평 확장은 인스턴스 추가(SKIP LOCKED) |
 | 좀비 복구 | **Lease + Sweeper** | `lease_expires_at` 만료 행을 PENDING 복구 |
 | 실패 사유 기록 | **컬럼 방식** (`last_error_code/message/at`, `retry_count`) + App Log | 마지막 에러는 DB, 전체 이력은 로그 시스템 위임 |
 | 실패 분류 | retryable vs permanent | 영구 실패(잘못된 이메일 등)는 즉시 DEAD_LETTER |

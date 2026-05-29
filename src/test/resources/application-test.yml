@@ -1,5 +1,8 @@
 # 테스트 프로파일: 타임아웃/주기를 짧게. 시간 의존 단위 테스트는 Clock 주입으로 결정적 검증.
 spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 20   # 동시성 테스트(동일 알림 다수 동시 생성/읽음)에서 커넥션 고갈 방지
   jpa:
     hibernate:
       ddl-auto: none
@@ -22,7 +25,7 @@ notification:
     interval: 1s
     lease-timeout: 10s
   worker:
-    semaphore-permits: 8
+    concurrency: 4
   retention:
     enabled: false
     sent-days: 30

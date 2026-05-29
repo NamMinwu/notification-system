@@ -148,4 +148,46 @@ class NotificationWorkerIT {
 
 		assertThat(reload(id).getStatus()).isEqualTo(NotificationStatus.SENT);
 	}
+
+	@Test
+	@DisplayName("배치 실패 격리: 한 runOnce에서 정상/일시실패/영구실패가 독립 트랜잭션으로 각각 종료")
+	void batchFailureIsolation_eachEndsIndependently() {
+		Long okId = savePending("user-1", "evt-ok", null).getId();
+		Long transientId = savePending("fail-user", "evt-fail", null).getId();
+		Long permanentId = savePending("permanent-fail-user", "evt-perm", null).getId();
+
+		worker.runOnce();
+
+		// 한 건의 실패가 같은 배치의 다른 건을 오염시키지 않는다 (건별 @Transactional)
+		assertThat(reload(okId).getStatus()).isEqualTo(NotificationStatus.SENT);
+		Notification failed = reload(transientId);
+		assertThat(failed.getStatus()).isEqualTo(NotificationStatus.FAILED);
+		assertThat(failed.getRetryCount()).isEqualTo(1);
+		assertThat(reload(permanentId).getStatus()).isEqualTo(NotificationStatus.DEAD_LETTER);
+	}
+
+	@Test
+	@DisplayName("종료 상태 CANCELLED는 워커가 픽업하지 않음 (취소 후 재발송 안 됨)")
+	void cancelled_notPickedByWorker() {
+		Notification n = savePending("user-1", "evt-1", null);
+		n.cancel(START);
+		Long id = repository.saveAndFlush(n).getId();
+
+		worker.runOnce();
+
+		assertThat(reload(id).getStatus()).isEqualTo(NotificationStatus.CANCELLED);
+	}
+
+	@Test
+	@DisplayName("종료 상태 DEAD_LETTER는 워커가 픽업하지 않음 (수동 재시도 전까지 휴면)")
+	void deadLetter_notPickedByWorker() {
+		Notification n = savePending("user-1", "evt-1", null);
+		n.startProcessing(START, START.plus(Duration.ofMinutes(5)));
+		n.markDeadLetter("INVALID_RECIPIENT", "final", START.plusSeconds(1));
+		Long id = repository.saveAndFlush(n).getId();
+
+		worker.runOnce();
+
+		assertThat(reload(id).getStatus()).isEqualTo(NotificationStatus.DEAD_LETTER);
+	}
 }
