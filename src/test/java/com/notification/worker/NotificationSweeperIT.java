@@ -87,7 +87,6 @@ class NotificationSweeperIT {
 		Notification n = reload(id);
 		assertThat(n.getStatus()).isEqualTo(NotificationStatus.PENDING);
 		assertThat(n.getLeaseExpiresAt()).isNull();
-		assertThat(n.getProcessingStartedAt()).isNull();
 	}
 
 	@Test

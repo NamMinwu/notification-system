@@ -172,11 +172,12 @@ public void onPaymentConfirmed(...) {
 retry_count        : 3
 last_error_code    : SMTP_TIMEOUT
 last_error_message : Connection timeout after 30s
-last_failed_at     : 2026-05-28T10:01:30Z
+updated_at         : 2026-05-28T10:01:30Z   (마지막 전이 시각)
 ```
 
 전체 시도 이력은 application log로 남긴다 (누적 분석은 로그/메트릭 시스템에 위임).
-별도 `failure_history` 테이블은 YAGNI로 판단 — 필요 시 컬럼은 그대로 두고 테이블만 추가하면 된다.
+별도 `failure_history` 테이블은 YAGNI로 판단 — 필요 시 테이블만 추가하면 된다.
+상태별 타임스탬프(`sent_at`/`failed_at` 등)도 같은 이유로 두지 않는다([02-요구사항 해석](02-REQUIREMENTS-INTERPRETATION.md) 개선 의견 참고).
 
 ### 5-4. 최종 실패(DEAD_LETTER)와 수동 재시도
 

@@ -65,21 +65,6 @@ public class Notification {
 	@Column(name = "lease_expires_at")
 	private Instant leaseExpiresAt;
 
-	@Column(name = "processing_started_at")
-	private Instant processingStartedAt;
-
-	@Column(name = "sent_at")
-	private Instant sentAt;
-
-	@Column(name = "failed_at")
-	private Instant failedAt;
-
-	@Column(name = "dead_letter_at")
-	private Instant deadLetterAt;
-
-	@Column(name = "cancelled_at")
-	private Instant cancelledAt;
-
 	@Column(name = "last_error_code")
 	private String lastErrorCode;
 
@@ -119,13 +104,11 @@ public class Notification {
 
 	public void startProcessing(Instant now, Instant leaseExpiresAt) {
 		transitionTo(NotificationStatus.PROCESSING, now);
-		this.processingStartedAt = now;
 		this.leaseExpiresAt = leaseExpiresAt;
 	}
 
 	public void markSent(Instant now) {
 		transitionTo(NotificationStatus.SENT, now);
-		this.sentAt = now;
 		this.leaseExpiresAt = null;
 	}
 
@@ -135,7 +118,6 @@ public class Notification {
 		this.lastErrorCode = errorCode;
 		this.lastErrorMessage = errorMessage;
 		this.nextRetryAt = nextRetryAt;
-		this.failedAt = now;
 		this.leaseExpiresAt = null;
 	}
 
@@ -143,19 +125,16 @@ public class Notification {
 		transitionTo(NotificationStatus.DEAD_LETTER, now);
 		this.lastErrorCode = errorCode;
 		this.lastErrorMessage = errorMessage;
-		this.deadLetterAt = now;
 		this.leaseExpiresAt = null;
 	}
 
 	public void recoverToPending(Instant now) {
 		transitionTo(NotificationStatus.PENDING, now);
 		this.leaseExpiresAt = null;
-		this.processingStartedAt = null;
 	}
 
 	public void cancel(Instant now) {
 		transitionTo(NotificationStatus.CANCELLED, now);
-		this.cancelledAt = now;
 	}
 
 	/**
@@ -165,7 +144,6 @@ public class Notification {
 	public void retry(Instant now) {
 		transitionTo(NotificationStatus.PENDING, now);
 		this.nextRetryAt = now;
-		this.deadLetterAt = null;
 		this.leaseExpiresAt = null;
 	}
 

@@ -72,7 +72,6 @@ class AdminNotificationServiceIT {
 		Notification reloaded = repository.findById(dl.getId()).orElseThrow();
 		assertThat(reloaded.getStatus()).isEqualTo(NotificationStatus.PENDING);
 		assertThat(reloaded.getNextRetryAt()).isNotNull();
-		assertThat(reloaded.getDeadLetterAt()).isNull();
 	}
 
 	@Test

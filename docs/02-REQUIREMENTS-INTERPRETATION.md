@@ -134,6 +134,17 @@
     ② **TTL 로컬 캐시(Caffeine)**(최대 TTL만큼의 결과적 일관성)를 도입한다. 단순 로컬 캐시는
     다중 인스턴스 무효화가 불가능하므로 지양한다.
 
+12. **상태별 타임스탬프 / 운영 지표 — 의도적으로 제외(YAGNI).**
+    초기엔 전이 시각을 행에 모두 기록(`processing_started_at`, `sent_at`, `failed_at`,
+    `dead_letter_at`, `cancelled_at`)해 "평균 처리 시간", "DEAD_LETTER까지 평균 시간" 같은
+    지표를 뽑는 안을 고려했다. 그러나 ① 이 컬럼들을 **읽는 코드가 전혀 없었고**(write-only),
+    ② 종료 상태 시각은 `status + updated_at`으로 충분히 재구성되며, ③ "전체 이력은 로그/메트릭
+    시스템에 위임"이라는 본 설계 원칙([00-DECISIONS](00-DECISIONS.md) §4)과 정면으로 어긋나
+    **제거했다**. 실제로 운영 지표가 필요해지면 행 컬럼이 아니라 **관측(observability) 계층**에서
+    뽑는다 — 전이마다 구조화 로그(`event=state_transition, from, to, at`)를 남기고
+    Prometheus 히스토그램(`notification_processing_seconds`) 또는 로그 집계로 산출한다. 이렇게 하면
+    p50/p95 분포까지 얻을 수 있어, 행에 평균용 시각만 남기는 것보다 운영 가치가 크다.
+
 ---
 
 ## C. 요약

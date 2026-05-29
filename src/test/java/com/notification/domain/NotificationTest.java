@@ -37,7 +37,7 @@ class NotificationTest {
 	}
 
 	@Test
-	@DisplayName("startProcessing: PENDING → PROCESSING, lease/처리시작 시각 설정")
+	@DisplayName("startProcessing: PENDING → PROCESSING, lease 설정")
 	void startProcessing_setsLease() {
 		Notification n = newPending();
 		Instant lease = NOW.plusSeconds(300);
@@ -45,12 +45,11 @@ class NotificationTest {
 		n.startProcessing(NOW, lease);
 
 		assertThat(n.getStatus()).isEqualTo(NotificationStatus.PROCESSING);
-		assertThat(n.getProcessingStartedAt()).isEqualTo(NOW);
 		assertThat(n.getLeaseExpiresAt()).isEqualTo(lease);
 	}
 
 	@Test
-	@DisplayName("markSent: PROCESSING → SENT, sentAt 설정 및 lease 해제")
+	@DisplayName("markSent: PROCESSING → SENT, lease 해제")
 	void markSent() {
 		Notification n = newPending();
 		n.startProcessing(NOW, NOW.plusSeconds(300));
@@ -58,7 +57,6 @@ class NotificationTest {
 		n.markSent(NOW.plusSeconds(1));
 
 		assertThat(n.getStatus()).isEqualTo(NotificationStatus.SENT);
-		assertThat(n.getSentAt()).isEqualTo(NOW.plusSeconds(1));
 		assertThat(n.getLeaseExpiresAt()).isNull();
 	}
 
@@ -76,7 +74,6 @@ class NotificationTest {
 		assertThat(n.getLastErrorCode()).isEqualTo("SMTP_TIMEOUT");
 		assertThat(n.getLastErrorMessage()).isEqualTo("Connection timeout");
 		assertThat(n.getNextRetryAt()).isEqualTo(nextRetry);
-		assertThat(n.getFailedAt()).isEqualTo(NOW.plusSeconds(1));
 		assertThat(n.getLeaseExpiresAt()).isNull();
 	}
 
@@ -103,7 +100,6 @@ class NotificationTest {
 		n.markDeadLetter("INVALID_EMAIL", "bad address", NOW.plusSeconds(1));
 
 		assertThat(n.getStatus()).isEqualTo(NotificationStatus.DEAD_LETTER);
-		assertThat(n.getDeadLetterAt()).isEqualTo(NOW.plusSeconds(1));
 		assertThat(n.getLastErrorCode()).isEqualTo("INVALID_EMAIL");
 	}
 
@@ -120,7 +116,7 @@ class NotificationTest {
 	}
 
 	@Test
-	@DisplayName("recoverToPending: PROCESSING → PENDING (좀비 복구), lease/처리시작 초기화")
+	@DisplayName("recoverToPending: PROCESSING → PENDING (좀비 복구), lease 초기화")
 	void recoverToPending() {
 		Notification n = newPending();
 		n.startProcessing(NOW, NOW.plusSeconds(300));
@@ -129,7 +125,6 @@ class NotificationTest {
 
 		assertThat(n.getStatus()).isEqualTo(NotificationStatus.PENDING);
 		assertThat(n.getLeaseExpiresAt()).isNull();
-		assertThat(n.getProcessingStartedAt()).isNull();
 	}
 
 	@Test
@@ -146,7 +141,6 @@ class NotificationTest {
 		assertThat(n.getStatus()).isEqualTo(NotificationStatus.PENDING);
 		assertThat(n.getRetryCount()).isEqualTo(retryCountBefore); // 누적 유지
 		assertThat(n.getNextRetryAt()).isEqualTo(retryAt);         // 즉시 픽업 대상
-		assertThat(n.getDeadLetterAt()).isNull();
 		assertThat(n.getLastErrorCode()).isEqualTo("INVALID_EMAIL"); // 이력 보존
 	}
 
@@ -167,7 +161,6 @@ class NotificationTest {
 		n.cancel(NOW.plusSeconds(5));
 
 		assertThat(n.getStatus()).isEqualTo(NotificationStatus.CANCELLED);
-		assertThat(n.getCancelledAt()).isEqualTo(NOW.plusSeconds(5));
 	}
 
 	@Test
