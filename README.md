@@ -13,6 +13,7 @@
 | [docs/00-DECISIONS.md](docs/00-DECISIONS.md) | 선결정 사항 (ADR) — 모든 설계 결정과 근거 |
 | [docs/01-ASYNC-RETRY.md](docs/01-ASYNC-RETRY.md) | 비동기 처리 구조 및 재시도 정책 설명 |
 | [docs/02-REQUIREMENTS-INTERPRETATION.md](docs/02-REQUIREMENTS-INTERPRETATION.md) | 요구사항 해석 및 개선 의견 |
+| [docs/04-SCALE-ESTIMATION.md](docs/04-SCALE-ESTIMATION.md) | 규모 추정 및 설계 적합성 검증 |
 
 ## 기술 스택
 

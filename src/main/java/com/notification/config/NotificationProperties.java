@@ -10,6 +10,7 @@ public record NotificationProperties(
 		Retry retry,
 		Sender sender,
 		Sweeper sweeper,
+		Worker worker,
 		Retention retention,
 		MockSender mockSender,
 		boolean schedulingEnabled) {
@@ -29,6 +30,13 @@ public record NotificationProperties(
 	}
 
 	public record Sweeper(Duration interval, Duration leaseTimeout) {
+	}
+
+	/**
+	 * 인스턴스당 발송 동시성(고정 스레드풀 크기). 외부 자원 한도에 맞춰 의도적으로 제한한다.
+	 * 불변식: lease-timeout ≥ ⌈batch-size/concurrency⌉ × sender-timeout + 마진 (좀비 오인 방지).
+	 */
+	public record Worker(int concurrency) {
 	}
 
 	public record Retention(boolean enabled, int sentDays, int deadLetterDays) {

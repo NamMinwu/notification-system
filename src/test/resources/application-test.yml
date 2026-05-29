@@ -24,6 +24,8 @@ notification:
   sweeper:
     interval: 1s
     lease-timeout: 10s
+  worker:
+    concurrency: 4
   retention:
     enabled: false
     sent-days: 30

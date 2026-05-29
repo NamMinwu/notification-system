@@ -19,7 +19,7 @@
    │  Sweeper        │ ◀───────────── │  NotificationWorker  │
    │ (좀비 복구)      │                │  (Polling Dispatcher)│
    └────────────────┘                └──────────┬───────────┘
-                                                 │ 3) 순차 dispatch (건별 독립 tx)
+                                                 │ 3) 고정 풀 dispatch (건별 독립 tx)
                                                  ▼
                                         ┌──────────────────┐
                                         │ NotificationSender│ (EMAIL / IN_APP, Mock)
@@ -75,31 +75,31 @@ API 스레드는 **DB에 쓰기만** 하고 끝난다. 실제 외부 발송(SMTP
   1. SELECT ... WHERE status='PENDING' (or FAILED) AND 발송 시각 도래
        ORDER BY created_at LIMIT 50
        FOR UPDATE SKIP LOCKED            -- 다중 인스턴스 안전
-  2. 픽업한 행을 PROCESSING으로 전이 + lease_expires_at = now + 5분
+  2. 픽업한 행을 PROCESSING으로 전이 + lease_expires_at = now + 10분
   3. (트랜잭션 커밋 → 락 해제, 하지만 상태가 PROCESSING이라 재픽업 안 됨)
-  4. 각 알림을 순차 발송 (건별 독립 트랜잭션)
+  4. 각 알림을 고정 풀(concurrency)로 발송 (건별 독립 트랜잭션)
        성공 → SENT
        일시 실패 → FAILED + retry_count++ + next_retry_at 계산
        영구 실패 → DEAD_LETTER
 ```
 
-### 3-3. Worker 발송 모델 — 순차 dispatch + 수평 확장
+### 3-3. Worker 발송 모델 — 고정 스레드풀 (의도적 동시성 제한)
 
-배치 내 알림은 **인스턴스당 순차**로 발송한다. 각 알림 발송은 **독립 트랜잭션**이라 한 건 실패가
-다른 건에 영향을 주지 않는다(실패 격리). 우리 요구사항(비동기·재시도·중복방지·복구)은 모두
-Outbox 메커니즘으로 충족되며, **배치 내 병렬은 정확성과 무관한 throughput 노브**일 뿐이다.
+배치를 claim한 뒤, 각 알림을 **발송 전용 고정 스레드풀(`worker.concurrency=16`)** 에 제출하고
+모두 끝날 때까지 대기한다. 동시 발송 수는 **외부 자원 한도에 맞춰 의도적으로 제한**한다 —
+설계 목표가 "**중간 시나리오 기준 + 낙관까지 여유**"이기 때문이다. 각 발송은 **독립 트랜잭션**이라
+한 건 실패가 다른 건에 영향을 주지 않는다(실패 격리).
 
-- **처리량 확장의 1차 수단은 인스턴스 추가**다. `SKIP LOCKED`가 인스턴스 간 중복 없이 작업을 분배하므로,
-  워커 인스턴스를 늘리면 선형에 가깝게 확장된다(검증: `WorkerConcurrencyIT`).
-- **인스턴스 내 병렬은 의도적으로 미도입**: 현재 sender는 Mock(즉시 반환)이라 병렬 이득이 없고,
-  발송을 트랜잭션 안에서 하는 한 동시성이 커넥션 풀에 묶여 가상 스레드 이점도 상쇄된다.
+- **평소(중간)**: 풀이 대부분 idle(동시 1~4), **낙관(~10 동시)**: 한도까지 차올라 **재설계 없이 흡수**.
+- **왜 고정 풀인가**: 순차(동시성 1)는 낙관 흡수에 인스턴스 ~10대가 필요해 "여유"가 없다.
+  Virtual Thread는 "외부 무제한 동시 호출"용이라 **의도적 제한**이 목표인 본 워크로드와는 반대다.
+  "딱 N 동시"를 가장 직접적으로 표현하는 게 고정 풀이며, 큐가 차면 CallerRuns로 backpressure를 준다.
+- **수평 확장**: `SKIP LOCKED`가 인스턴스 간 중복 없이 분배하므로 인스턴스를 늘리면 선형 확장(검증: `WorkerConcurrencyIT`).
 
-**언제 인스턴스 내 병렬을 도입하나?** 실제 sender I/O가 느리고(예: SMTP 수백 ms) 단일 인스턴스
-처리량이 부족해질 때. 그때는 **외부 한도(N)에 맞춘 고정 스레드풀**을 쓰고, **발송을 트랜잭션 밖으로**
-빼서 I/O 동안 커넥션을 점유하지 않게 한다. 단, 이 경우 "발송 성공 ~ 결과 기록" 사이 창이 넓어져
-중복 발송 가능성이 커지므로 **sender 레벨 idempotency**(동일 message-id)가 함께 필요하다.
-(가상 스레드는 "외부를 의도적으로 제한"하는 본 워크로드보다, 외부가 무제한이라 대량 동시 I/O가
-필요한 경우에 적합하다.)
+**더 큰 규모(매우 낙관, 동시성 수십+)에서는?** 발송을 **트랜잭션 밖으로** 빼 I/O 동안 커넥션을
+점유하지 않게 한다. 단 "발송 성공 ~ 결과 기록" 창이 넓어져 중복 가능성이 커지므로
+**sender 레벨 idempotency**(동일 message-id)를 함께 도입한다. (현재 규모에선 발송을 tx 안에서
+하는 게 단순하고 일관성 창이 좁아 더 적합하다.)
 
 ---
 
@@ -199,13 +199,15 @@ Worker가 알림을 PROCESSING으로 잡은 직후 죽으면(OOM, kill -9), 그 
 PROCESSING에 영원히 갇힌다(좀비). 이를 막기 위해 **Lease(임대)** 개념을 둔다.
 
 ```
-픽업 시:   status=PROCESSING, lease_expires_at = now + 5분
+픽업 시:   status=PROCESSING, lease_expires_at = now + 10분
 Sweeper(1분마다):
    UPDATE ... SET status='PENDING'
    WHERE status='PROCESSING' AND lease_expires_at < now()
 ```
 
-- Lease = Sender 타임아웃(2분) × 2 + 마진 ≈ 5분 → 정상 처리를 좀비로 오인하지 않음.
+- **Lease 불변식**: `lease ≥ ⌈batch/concurrency⌉ × sender-timeout + 마진`. claim 시점에 배치 전체에
+  lease를 걸므로, 고정 풀(N)로 처리할 때 **배치의 마지막 건이 끝나기 전**에 만료되면 안 된다.
+  `⌈50/16⌉ × 2분 = 8분` → **lease 10분**. (순차 단일 발송 기준의 "Sender×2"보다 배치 완료시간이 기준.)
 - 만료된 좀비는 PENDING으로 복구되어 다음 polling에서 다른 Worker가 재처리.
 
 > Edge case: lease 만료 직후 원래 Worker의 발송이 뒤늦게 성공하면 중복 발송 가능.
@@ -259,7 +261,8 @@ notification:
   polling:   { interval: 5s, batch-size: 50 }
   retry:     { max-attempts: 5, initial-backoff: 1m, multiplier: 2, max-backoff: 16m, jitter-max: 30s }
   sender:    { timeout: 2m }
-  sweeper:   { interval: 1m, lease-timeout: 5m }
+  sweeper:   { interval: 1m, lease-timeout: 10m }
+  worker:    { concurrency: 16 }
   scheduling-enabled: true
   retention: { enabled: false, sent-days: 30, dead-letter-days: 90 }
 ```
