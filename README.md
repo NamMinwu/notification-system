@@ -156,8 +156,9 @@ curl -X POST localhost:8080/api/v1/admin/notifications/1/retry -H 'X-User-Role: 
 ## 스키마 (Flyway: `V1__init.sql`, `V2__seed_templates.sql`)
 
 - **`notification`** — Outbox 테이블. 중복 방지는 `UNIQUE (event_id, recipient_id, channel, notification_type)`
-  (event_id NULL이면 dedup 제외 = 관리자 단발 발송 허용). 폴링/Sweeper/목록/DLQ용 partial index 4종.
-- **`notification_template`** — 타입·채널·언어·버전별 템플릿 (선택 구현). 발송 시 Mustache 렌더링.
+  (event_id NULL이면 dedup 제외 = 관리자 단발 발송 허용). 워커 폴링용 partial index + 사용자 목록 조회용 인덱스.
+  Sweeper(1/min)와 DLQ 관리자 조회는 저빈도라 인덱스 없이 풀스캔 허용 (활성 행 작음).
+- **`notification_template`** — 타입·채널·언어별 템플릿 (선택 구현). 발송 시 Mustache 렌더링.
 
 ---
 
