@@ -41,9 +41,6 @@ public class NotificationTemplate {
 	@Column(name = "body", nullable = false)
 	private String body;
 
-	@Column(name = "version", nullable = false)
-	private int version;
-
 	@Column(name = "is_active", nullable = false)
 	private boolean active;
 
@@ -61,7 +58,6 @@ public class NotificationTemplate {
 		this.language = language;
 		this.subject = subject;
 		this.body = body;
-		this.version = 1;
 		this.active = true;
 		this.createdAt = createdAt;
 		this.updatedAt = createdAt;

@@ -11,11 +11,10 @@ public record TemplateResponse(
 		String language,
 		String subject,
 		String body,
-		int version,
 		boolean active) {
 
 	public static TemplateResponse from(NotificationTemplate t) {
 		return new TemplateResponse(t.getId(), t.getNotificationType(), t.getChannel(),
-				t.getLanguage(), t.getSubject(), t.getBody(), t.getVersion(), t.isActive());
+				t.getLanguage(), t.getSubject(), t.getBody(), t.isActive());
 	}
 }
