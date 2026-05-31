@@ -173,6 +173,6 @@ curl -X POST localhost:8080/api/v1/admin/notifications/1/retry -H 'X-User-Role: 
 
 ## 기술 스택
 
-- Java 21, Spring Boot 4.0.x, Spring Data JPA(Hibernate)
+- Java 21, Spring Boot 3.5.x, Spring Data JPA(Hibernate)
 - PostgreSQL 16, Flyway, JMustache(템플릿 렌더링)
 - Gradle(Kotlin DSL) / 테스트: JUnit 5, Testcontainers, AssertJ, Mockito, JaCoCo
