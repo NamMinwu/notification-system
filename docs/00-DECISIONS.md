@@ -10,8 +10,8 @@
 | 항목 | 채택 | 근거 |
 |---|---|---|
 | 데이터베이스 | **PostgreSQL 16** | `FOR UPDATE SKIP LOCKED`, `ON CONFLICT`, JSONB, Partial Index 모두 네이티브 지원 |
-| 언어/런타임 | **Java 21** | 최신 LTS (record/sealed/switch 패턴 등). 향후 인스턴스 내 병렬 발송 시 Virtual Thread도 선택지 |
-| 프레임워크 | **Spring Boot 4.0.x + JPA(Hibernate)** | 과제 지정 스택 (최신 GA) |
+| 언어/런타임 | **Java 21 (LTS)** | 통제 가능한 축에선 신기능(25) 대신 **가장 검증된 LTS**를 택함. record/sealed/switch로 도메인 표현, Virtual Thread도 안정화 완료(단 의도적 미사용 — 4.1절) |
+| 프레임워크 | **Spring Boot 3.5.x + JPA(Hibernate)** | **안정성 우선**: 첫 GA(4.0)의 초기 버그·라이브러리 호환 지연을 피해 가장 성숙한 3.5 라인 채택. "Kafka·VT·샤딩 미도입"과 같은 right-sizing 철학과 일관 |
 | 빌드 도구 | **Gradle (Kotlin DSL)** | 최신 Spring Boot 권장, 타입 안전한 빌드 스크립트 |
 | 마이그레이션 | **Flyway** | 버전 관리되는 스키마, 운영 전환 가능 |
 | 인증/인가 | **`X-User-Id` 헤더 기반 간소화** | 과제 허용 범위. 권한 검증(본인 알림만 조회/읽음)은 유지 |
