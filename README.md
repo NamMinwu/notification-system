@@ -3,8 +3,13 @@
 이벤트 기반 **비동기 알림 발송 시스템** (Spring Boot · JPA · PostgreSQL)
 
 수강 신청 완료, 결제 확정, 강의 시작 D-1, 취소 처리 등 다양한 이벤트에 대해 이메일 / 인앱 알림을
-**비동기**로 발송한다. 메시지 브로커 없이 **Transactional Outbox + Polling Worker** 패턴으로
-실패 시 **재시도**, **중복 방지**, **다중 인스턴스 안전성**, **재시작 무손실**을 보장한다.
+비동기로 발송한다. 메시지 브로커를 두지 않고 **Transactional Outbox + Polling Worker** 패턴만으로
+동작하며, 다음을 보장한다.
+
+- **재시도**: 발송이 실패하면 백오프를 두고 자동으로 다시 시도한다.
+- **중복 방지**: 같은 이벤트가 두 번 발송되지 않는다.
+- **다중 인스턴스 안전성**: 인스턴스를 여러 대 띄워도 한 알림을 한 번만 처리한다.
+- **재시작 무손실**: 서버가 재시작해도 처리 중이던 알림을 잃지 않는다.
 
 ---
 
@@ -89,7 +94,7 @@ DEAD_LETTER ──▶ PENDING (수동 재시도 재큐잉)
 | `GET` | `/{id}` | 알림 상태 조회 (본인만, 타인 **403**) | `X-User-Id` |
 | `GET` | `/?unreadOnly=false` | 본인 알림 목록 (읽음/안읽음 필터) | `X-User-Id` |
 | `PATCH` | `/{id}/read` | 읽음 처리 (멱등, read_at은 첫 시각 고정) | `X-User-Id` |
-| `PATCH` | `/read-all` | 안 읽은 알림 일괄 읽음 (`{updatedCount}`) | `X-User-Id` |
+| `PATCH` | `/read-all` | 안 읽은 알림 일괄 읽음 → 응답 `{"updatedCount": N}` | `X-User-Id` |
 | `PATCH` | `/{id}/cancel` | 예약 발송 취소 (PENDING만, 아니면 **409**) | `X-User-Id` |
 
 ### 운영자 API — `/api/v1/admin/...` (`X-User-Role: ADMIN`)
@@ -97,7 +102,7 @@ DEAD_LETTER ──▶ PENDING (수동 재시도 재큐잉)
 | 메서드 | 경로 | 설명 |
 |---|---|---|
 | `POST` | `/notifications/{id}/retry` | DEAD_LETTER 단건 수동 재시도 (retry_count 유지) |
-| `POST` | `/notifications/retry-batch` | errorCode 일치 DEAD_LETTER 일괄 재시도 (`{retriedCount}`) |
+| `POST` | `/notifications/retry-batch` | 요청 body의 `errorCode`와 일치하는 DEAD_LETTER 일괄 재시도 → 응답 `{"retriedCount": N}` |
 | `GET` | `/notifications/dead-letter` | DEAD_LETTER 목록 |
 | `GET` | `/notifications/dead-letter/stats` | errorCode별 집계 (모니터링) |
 | `PUT` | `/templates` | 템플릿 업서트 (Mustache 문법 검증, 운영 중 문구 수정) |
@@ -147,7 +152,7 @@ curl -X POST localhost:8080/api/v1/admin/notifications/1/retry -H 'X-User-Role: 
 | `notification.retry.initial-backoff` / `multiplier` / `max-backoff` | `1m` / `2` / `16m` | 지수 백오프 (1→2→4→8→16분) |
 | `notification.retry.jitter-max` | `30s` | thundering herd 방지(재시도 시각 분산) |
 | `notification.sender.timeout` | `2m` | 외부 발송 타임아웃 |
-| `notification.sweeper.interval` / `lease-timeout` | `1m` / `10m` | 좀비 감지 주기 / Lease (불변식: ≥⌈batch/concurrency⌉×sender-timeout+마진) |
+| `notification.sweeper.interval` / `lease-timeout` | `1m` / `10m` | 좀비 감지 주기 / Lease (≥⌈batch/concurrency⌉×sender-timeout+마진 — 배치 마지막 건이 끝나기 전 만료 금지) |
 | `notification.worker.concurrency` | `16` | 인스턴스당 발송 동시성(고정 풀) |
 | `spring.datasource.hikari.maximum-pool-size` | `20` | 인스턴스수×풀 ≤ PG `max_connections` |
 
@@ -176,3 +181,15 @@ curl -X POST localhost:8080/api/v1/admin/notifications/1/retry -H 'X-User-Role: 
 - Java 21, Spring Boot 3.5.x, Spring Data JPA(Hibernate)
 - PostgreSQL 16, Flyway, JMustache(템플릿 렌더링)
 - Gradle(Kotlin DSL) / 테스트: JUnit 5, Testcontainers, AssertJ, Mockito, JaCoCo
+
+---
+
+## AI 도구 활용
+
+설계 의사결정과 최종 코드는 모두 직접 검토·확정했으며, AI 코딩 어시스턴트(Claude)는 아래 범위에서 보조 도구로 사용했다.
+
+1. **요구사항 분석**: 과제 명세를 AI로 분석해 모호한 지점과 해석 선택지를 정리했다.
+2. **설계 결정**: 선택지별 trade-off를 AI와 비교한 뒤, 무엇을 채택할지는 직접 판단해 확정했다.
+3. **구현 계획**: 확정한 설계를 바탕으로 AI와 함께 작업을 분해하고 구현 순서를 세웠다.
+4. **구현**: AI와 함께 TDD(RED → GREEN → REFACTOR)로 테스트와 코드를 작성하고, AI 코드 리뷰를 거친 뒤 직접 검토해 반영했다.
+5. **문서화**: 초안 작성과 문장 다듬기에 활용하고, 내용은 직접 검증했다.
