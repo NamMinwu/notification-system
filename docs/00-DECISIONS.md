@@ -44,8 +44,6 @@ DEAD_LETTER ──▶ PENDING (수동 재시도 재큐잉 → 워커가 다시 c
 | `DEAD_LETTER` | 최종 실패 | 영구 예외 / retry_count ≥ MAX | PENDING (수동 재시도 재큐잉) |
 | `CANCELLED` | 예약 취소됨 | PENDING에서 취소 요청 | (종료) |
 
-> **요구사항 trade-off 문서는 5-state를 권장**했으나, 선택 구현(발송 스케줄링)의 **예약 취소**를 명시적으로 다루기 위해 `CANCELLED` 종료 상태를 1개 추가했다. 취소는 `PENDING` 상태에서만 가능하며(이미 PROCESSING/SENT면 불가), 감사 이력이 남고 worker polling 대상에서 자연히 제외된다. Soft delete 대비 "사용자가 의도적으로 취소했다"는 의미가 상태로 명확히 표현된다.
-
 상태 전이는 `NotificationStatus.canTransitionTo(next)` 로 도메인 레벨에서 강제한다.
 
 ### 2.2 중복 방지 (Idempotency) — **4컬럼 복합 UNIQUE**
@@ -62,7 +60,7 @@ UNIQUE (event_id, recipient_id, channel, notification_type)
 - 중복 INSERT 시 `DataIntegrityViolationException` → 기존 레코드 ID 반환 (멱등 응답: 첫 요청 201, 재요청 200).
 - **`event_id`가 NULL이면 dedup 안 함** — PostgreSQL은 NULL을 distinct로 취급하므로, 관리자 단발 발송 등 이벤트 없는 알림은 중복 검사 없이 허용된다.
 
-> 요구사항 trade-off 문서는 SHA-256 해시 키를 권장했으나, 동일한 4요소를 **복합 UNIQUE 제약**으로 직접 표현하는 쪽을 택했다. 컬럼이 그대로 노출되어 디버깅·운영 조회가 쉽고, 해시 충돌 고민이 없다.
+> 4요소를 SHA-256 해시 키 하나로 합치는 방법도 있으나, **복합 UNIQUE 제약**으로 직접 표현하는 쪽을 택했다. 컬럼이 그대로 노출되어 디버깅·운영 조회가 쉽고, 해시 충돌 고민이 없다.
 
 ### 2.3 NotificationType — **4종 enum 고정 (확장 가능)**
 
@@ -135,15 +133,15 @@ notification:
 
 ### 처리량 확장 ↔ 커넥션 풀 ↔ 다중 인스턴스
 
-발송은 인스턴스당 **고정 스레드풀(concurrency=16)** 로 처리한다 — 외부 자원 한도에 맞춰 동시 발송을 의도적으로 제한하는 것이 설계 목표(**중간 시나리오 기준 + 낙관까지 여유**). 평소(중간)엔 풀이 대부분 idle(동시 1~4)이고, 낙관 부하(~10 동시) 시 한도까지 차오른다 — **재설계 없이 흡수**.
+발송은 인스턴스당 **고정 스레드풀(concurrency=16)** 로 처리한다. 외부 자원 한도에 맞춰 동시 발송을 의도적으로 제한하는 것이 설계 목표이며, 중간 시나리오를 기준으로 잡되 낙관 시나리오까지 여유를 둔다. 평소(중간)엔 풀이 대부분 idle(동시 1~4)이고, 낙관 부하(~10 동시) 시 한도까지 차오르므로 재설계 없이 흡수된다.
 
-- **왜 순차/Virtual Thread가 아니라 고정 풀인가**: 순차(동시성 1)는 낙관 흡수에 인스턴스를 ~10대 필요로 해 "여유"가 없다. Virtual Thread는 "외부를 무제한 동시 호출"에 적합한데 우리는 정반대로 **의도적 제한**이 목표라 거꾸로다. "딱 N 동시"를 가장 직접적으로 표현하는 게 고정 풀이다.
+- **왜 순차/Virtual Thread가 아니라 고정 풀인가**: 순차(동시성 1)는 낙관 흡수에 인스턴스가 ~10대 필요해 여유가 없다. Virtual Thread는 외부를 무제한으로 동시 호출하는 데 적합한데, 본 설계는 반대로 동시성을 의도적으로 제한하는 것이 목표라 맞지 않는다. 딱 N개만 동시에 처리하도록 가장 직접적으로 표현하는 게 고정 풀이다.
 - **처리량 확장 순서**: ① 인스턴스 추가(`SKIP LOCKED` 수평) → ② 폴링/배치 튜닝 → ③ `worker.concurrency` 상향. 동시성이 매우 커지면(수십+) **발송을 트랜잭션 밖으로** 빼고 **sender 멱등성**을 도입한다(상세: [01-ASYNC-RETRY](01-ASYNC-RETRY.md)).
-- **다중 인스턴스(전역 상한)**: HikariCP 풀은 **인스턴스당**이고 진짜 상한은 PostgreSQL `max_connections`(기본 100). 따라서
+- **다중 인스턴스(전역 상한)**: HikariCP 풀은 **인스턴스당**이고 실제 상한은 PostgreSQL `max_connections`(기본 100). 따라서
   ```
   인스턴스 수 × 인스턴스당 풀 크기 + 여유 ≤ postgres max_connections
   ```
-  풀 20 기준 약 4인스턴스가 안전선. 더 늘리려면 **인스턴스당 풀을 줄이거나** **PgBouncer**(커넥션 풀러)를 둔다. "다중 인스턴스 = 풀을 키운다"가 아니라 그 반대.
+  풀 20 기준 약 4인스턴스가 안전선. 더 늘리려면 **인스턴스당 풀을 줄이거나** **PgBouncer**(커넥션 풀러)를 둔다. 인스턴스를 늘릴수록 인스턴스당 풀은 오히려 줄여야 한다.
 - `SELECT ... FOR UPDATE SKIP LOCKED` 덕분에 인스턴스끼리 풀을 공유하지 않고 서로 다른 행을 처리하므로, DB가 보는 총 커넥션만 인스턴스 수에 선형 증가한다. (다중 워커가 각 알림을 정확히 1회 처리함은 `WorkerConcurrencyIT`로 검증.)
 
 ---
@@ -161,7 +159,7 @@ notification:
 | 좀비 복구 | **Lease + Sweeper** | `lease_expires_at` 만료 행을 PENDING 복구 |
 | 실패 사유 기록 | **컬럼 방식** (`last_error_code/message`, `retry_count`, `updated_at`) + App Log | 마지막 에러·전이 시각은 DB, 전체 이력은 로그 시스템 위임 |
 | 실패 분류 | retryable vs permanent | 영구 실패(잘못된 이메일 등)는 즉시 DEAD_LETTER |
-| Mock Sender | **설정 가능 실패율 + 이메일 패턴 강제 실패** | `fail-*@*` 무조건 실패, `permanent-fail-*` 즉시 DEAD_LETTER → 재시도/DLQ 테스트 |
+| Mock Sender | **설정 가능 실패율 + recipientId 접두사 강제 실패** | recipientId가 `fail-*`이면 일시 실패, `permanent-fail-*`이면 즉시 DEAD_LETTER → 재시도/DLQ 테스트 |
 | 템플릿 엔진 | **Mustache (JMustache)** | logic-less, XSS 안전, 단순 치환에 적합. 업서트 시 문법 검증 |
 | 템플릿 소유권 | **알림 서비스가 소유** | 표현(문구)은 발송 책임자 관심사. 호출자는 payload(데이터)만 전달 |
 | 템플릿 저장/렌더 | **DB 테이블 + 발송 시 렌더링** (`TemplateRenderer` 인터페이스) | 운영 중 문구 수정·다국어. "데이터는 등록 시 고정, 표현은 발송 시 최신 템플릿". 캐시는 다중 인스턴스 무효화 불가로 미도입(항상 DB 조회) |
